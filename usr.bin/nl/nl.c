@@ -1,4 +1,4 @@
-/*	$OpenBSD: nl.c,v 1.7 2019/04/21 01:08:46 deraadt Exp $ */
+/*	$OpenBSD: nl.c,v 1.6 2015/10/09 01:37:08 deraadt Exp $ */
 /*	$NetBSD: nl.c,v 1.11 2011/08/16 12:00:46 christos Exp $	*/
 
 /*-
@@ -229,7 +229,7 @@ main(int argc, char *argv[])
 	/* Do the work. */
 	filter();
 
-	exit(EXIT_SUCCESS);
+	return(EXIT_SUCCESS);
 }
 
 void
