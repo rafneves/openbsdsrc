@@ -44,6 +44,7 @@
 #include <sys/mtio.h>
 #include <sys/audioio.h>
 #include <sys/videoio.h>
+#include <sys/resource.h>
 #include <net/bpf.h>
 #include <net/route.h>
 #include <net/if.h>
