@@ -1,6 +1,4 @@
-# Add pledge(2) to nl(1)
-
-**The [nl(1)](http://man.openbsd.org/nl) change was accepted and [commited](https://marc.info/?l=openbsd-cvs&m=155580893717963&w=2). This branch is closed.**
+# Add DUID support to -P option of mount_mfs(8)
 
 This is my personal working copy of OpenBSD source tree. It is solely used to keep my proposed changes until I submit them to OpenBSD project. 
 They may be accepted by OpenBSD developers or not.
