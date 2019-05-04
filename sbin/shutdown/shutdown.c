@@ -185,7 +185,7 @@ main(int argc, char *argv[])
 		if (unveil(_PATH_BSHELL, "x") == -1)
 			err(1, "unveil");
 	}
-	if (pledge("stdio rpath wpath cpath getpw tty id proc exec", NULL) == -1)
+	if (pledge("stdio rpath wpath cpath getpw tty prio id proc exec", NULL) == -1)
 		err(1, "pledge");
 
 	getoffset(*argv++);

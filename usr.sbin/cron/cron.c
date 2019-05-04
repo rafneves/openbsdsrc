@@ -102,7 +102,7 @@ main(int argc, char *argv[])
 
 	openlog(__progname, LOG_PID, LOG_CRON);
 
-	if (pledge("stdio rpath wpath cpath fattr getpw unix id dns proc exec",
+	if (pledge("stdio rpath wpath cpath fattr getpw unix id dns prio proc exec",
 	    NULL) == -1) {
 		warn("pledge");
 		syslog(LOG_ERR, "(CRON) PLEDGE (%m)");

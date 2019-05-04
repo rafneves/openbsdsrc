@@ -73,7 +73,7 @@ main(int argc, char **argv)
 	uid_t ruid;
 	u_int flags;
 
-	if (pledge("stdio unveil rpath getpw proc exec id", NULL) == -1)
+	if (pledge("stdio unveil rpath getpw prio proc exec id", NULL) == -1)
 		err(1, "pledge");
 
 	while ((ch = getopt(argc, argv, "a:c:fKLlms:-")) != -1)
@@ -224,7 +224,7 @@ main(int argc, char **argv)
 		fprintf(stderr, "Login incorrect\n");
 	}
 
-	if (pledge("stdio unveil rpath getpw exec id", NULL) == -1)
+	if (pledge("stdio unveil rpath getpw prio exec id", NULL) == -1)
 		err(1, "pledge");
 
 	if (!altshell) {
@@ -301,7 +301,7 @@ main(int argc, char **argv)
 		if (setenv("SHELL", shell, 1) == -1)
 			auth_err(as, 1, "unable to set environment");
 	}
-	if (pledge("stdio rpath getpw exec id", NULL) == -1)
+	if (pledge("stdio rpath getpw prio exec id", NULL) == -1)
 		err(1, "pledge");
 
 	np = *argv ? argv : argv - 1;

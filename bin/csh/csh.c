@@ -150,7 +150,7 @@ main(int argc, char *argv[])
     if (loginsh)
 	(void) time(&chktim);
 
-    if (pledge("stdio rpath wpath cpath fattr getpw proc exec tty",
+    if (pledge("stdio rpath wpath cpath fattr getpw prio proc exec tty",
 	NULL) == -1) {
 	    perror("pledge");
 	    exit(1);

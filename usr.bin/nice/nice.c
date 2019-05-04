@@ -50,7 +50,7 @@ main(int argc, char *argv[])
 	int prio = DEFNICE;
 	int c;
 
-	if (pledge("stdio exec proc", NULL) == -1)
+	if (pledge("stdio prio exec proc", NULL) == -1)
 		err(1, "pledge");
 
 	/* handle obsolete -number syntax */
