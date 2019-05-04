@@ -63,6 +63,7 @@
 #define PLEDGE_WROUTE	0x0000000800000000ULL	/* interface address ioctls */
 #define PLEDGE_UNVEIL	0x0000001000000000ULL	/* allow unveil() */
 #define PLEDGE_VIDEO	0x0000002000000000ULL	/* video ioctls */
+#define PLEDGE_PRIO	0x0000004000000000ULL	/* allow {get,set}priority */
 
 /*
  * Bits outside PLEDGE_USERSET are used by the kernel itself
@@ -113,6 +114,7 @@ static struct {
 	{ PLEDGE_WROUTE,	"wroute" },
 	{ PLEDGE_UNVEIL,	"unveil" },
 	{ PLEDGE_VIDEO,		"video" },
+	{ PLEDGE_PRIO,		"prio" },
 	{ 0, NULL },
 };
 #endif
@@ -141,6 +143,7 @@ int	pledge_fcntl(struct proc *p, int cmd);
 int	pledge_swapctl(struct proc *p);
 int	pledge_kill(struct proc *p, pid_t pid);
 int	pledge_protexec(struct proc *p, int prot);
+int	pledge_prio(struct proc *, struct process *, int, id_t, int);
 void	ppath_destroy(struct process *ps);
 
 #endif /* _KERNEL */

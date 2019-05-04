@@ -276,9 +276,9 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_setsid] = PLEDGE_PROC,
 
 	[SYS_setrlimit] = PLEDGE_PROC | PLEDGE_ID,
-	[SYS_getpriority] = PLEDGE_PROC | PLEDGE_ID,
+	[SYS_getpriority] = PLEDGE_PROC | PLEDGE_ID | PLEDGE_PRIO,
 
-	[SYS_setpriority] = PLEDGE_PROC | PLEDGE_ID,
+	[SYS_setpriority] = PLEDGE_PROC | PLEDGE_ID | PLEDGE_PRIO,
 
 	[SYS_setuid] = PLEDGE_ID,
 	[SYS_seteuid] = PLEDGE_ID,
@@ -386,6 +386,7 @@ static const struct {
 	{ "inet",		PLEDGE_INET },
 	{ "mcast",		PLEDGE_MCAST },
 	{ "pf",			PLEDGE_PF },
+	{ "prio",		PLEDGE_PRIO },
 	{ "proc",		PLEDGE_PROC },
 	{ "prot_exec",		PLEDGE_PROTEXEC },
 	{ "ps",			PLEDGE_PS },
@@ -1550,6 +1551,45 @@ pledge_protexec(struct proc *p, int prot)
 		return pledge_fail(p, EPERM, PLEDGE_PROTEXEC);
 	return 0;
 }
+
+/*
+ * Only allow documented flags for who and range for prio, and only allow root
+ * to increase priorities.
+ */
+int
+pledge_prio(struct proc *p, struct process *pr, int which, id_t who, int prio) {
+	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
+		return (0);
+
+	if ((p->p_p->ps_pledge & (PLEDGE_PRIO | PLEDGE_PROC | PLEDGE_ID)) == 0)
+		return (pledge_fail(p, EPERM, PLEDGE_PRIO));
+
+	/* Sanity check which. */
+	switch (which) {
+		case PRIO_PROCESS:
+		case PRIO_PGRP:
+		case PRIO_USER:
+			break;
+
+		default:
+			return (pledge_fail(p, EINVAL, PLEDGE_PRIO));
+	}
+
+	if (p->p_pledge_syscall == SYS_getpriority)
+		return (0);
+
+	/* prio must lie between PRIO_MIN and PRIO_MAX. */
+	if (prio < PRIO_MIN || prio > PRIO_MAX)
+		return (pledge_fail(p, EINVAL, PLEDGE_PRIO));
+
+	/* Only root may lower prio. */
+	prio += NZERO;
+	if ((prio < pr->ps_nice) && (suser(p) != 0))
+		return (pledge_fail(p, EACCES, PLEDGE_PRIO));
+
+	return (0);
+}
+
 
 int
 canonpath(const char *input, char *buf, size_t bufsize)
