@@ -118,7 +118,7 @@ main(int argc, char *argv[])
 
 	(void)setlocale(LC_ALL, "");
 
-	if (pledge("stdio rpath", NULL) == -1)
+	if (pledge("stdio unveil rpath", NULL) == -1)
 		err(1, "pledge");
 
 	while ((c = getopt(argc, argv, "pb:d:f:h:i:l:n:s:v:w:")) != -1) {
@@ -209,8 +209,14 @@ main(int argc, char *argv[])
 	case 0:
 		break;
 	case 1:
-		if (strcmp(argv[0], "-") != 0 &&
-		    freopen(argv[0], "r", stdin) == NULL)
+		if (strcmp(argv[0], "-") == 0)
+			break;
+
+		/* Let freopen(3) check deal with permission problems. */
+		if (unveil(argv[0], "r") == -1 && errno != ENOENT)
+			err(1, "unveil");
+
+		if (freopen(argv[0], "r", stdin) == NULL)
 			err(EXIT_FAILURE, "%s", argv[0]);
 		break;
 	default:
