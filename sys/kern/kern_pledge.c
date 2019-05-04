@@ -17,6 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/limits.h>
 #include <sys/param.h>
 
 #include <sys/mount.h>
@@ -1575,6 +1576,12 @@ pledge_prio(struct proc *p, struct process *pr, int which, id_t who, int prio) {
 		default:
 			return (pledge_fail(p, EINVAL, PLEDGE_PRIO));
 	}
+
+	/* Sanity check who, given which. */
+	if ((which == PRIO_PROCESS && who > PID_MAX) ||
+	    (which == PRIO_PGRP && who > GID_MAX) ||
+	    (which == PRIO_PGRP && who > UID_MAX))
+		return (pledge_fail(p, EINVAL, PLEDGE_PRIO));
 
 	if (p->p_pledge_syscall == SYS_getpriority)
 		return (0);
