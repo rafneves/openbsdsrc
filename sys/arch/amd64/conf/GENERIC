@@ -182,6 +182,9 @@ wsmouse* at iatp? mux 0
 skgpio0 at isa? port 0x680	# Soekris net6501 GPIO and LEDs
 gpio* at skgpio?
 
+apugpio* at isa? iomem 0xfed80000	# PC Engines APU 1 GPIO button and LEDs
+gpio* at apugpio?
+
 #option PCMCIAVERBOSE
 
 # PCI PCMCIA controllers

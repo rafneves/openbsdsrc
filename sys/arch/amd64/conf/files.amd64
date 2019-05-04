@@ -201,6 +201,11 @@ device	skgpio: gpiobus
 attach	skgpio at isa
 file	dev/isa/skgpio.c			skgpio
 
+# APU1 pushbutton switch and LEDs driver
+device apugpio: gpiobus
+attach apugpio at isa
+file   dev/isa/apugpio.c                       apugpio
+
 pseudo-device	pctr
 file	arch/amd64/amd64/pctr.c		pctr needs-flag
 

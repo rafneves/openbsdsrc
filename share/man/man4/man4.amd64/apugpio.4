@@ -1,0 +1,53 @@
+.\"     $OpenBSD$
+.\" Copyright (c) 2019 Rafael Neves <rafael@diskless.io>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: March 24 2019 $
+.Dt APUGPIO 4 amd64
+.Os
+.Sh NAME
+.Nm apugpio
+.Nd PC Engines APU 1 GPIO switch and LEDs
+.Sh SYNOPSIS
+.Cd "apugpio0 at isa? iomem 0xfed0000"
+.Cd "gpio* at apugpio?"
+.Sh DESCRIPTION
+The
+.Nm
+driver provides support for the pushbutton switch and LEDs integrated into the
+PC Engines APU1.
+.Pp
+Two standard
+.Xr gpio 4
+output-only interfaces are provided for the pushbutton switch, and for the 3 pins that maps
+to the three front LEDs.
+Both may be used with
+.Xr gpioctl 8 .
+.Pp
+Write operations in pushbutton's GPIO don't take any effect.
+.Sh SEE ALSO
+.Xr gpio 4 ,
+.Xr intro 4 ,
+.Xr isa 4 ,
+.Xr gpioctl 8
+.Sh HISTORY
+The
+.Nm
+driver first appeared in
+.Ox 6.6 .
+.Sh AUTHORS
+The
+.Nm
+driver was written by
+.An Rafael Neves Aq rafael@diskless.io .
