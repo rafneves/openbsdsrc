@@ -88,8 +88,10 @@ The
 .Ar special
 file should be a raw device,
 for example
-.Pa /dev/rsd0a ;
-if a relative path like
+.Pa /dev/rsd0a ,
+or a
+.Xr disklabel 8
+UID (DUID); if a relative path like
 .Pa sd0a
 is specified,
 the corresponding raw device is used.
@@ -293,9 +295,7 @@ is a directory, populate the created mfs file system with the
 contents of the directory.
 If
 .Ar file
-is a block device or a
-.Xr disklabel 8
-UID (DUID), populate the created mfs file system with the
+is a block device or a DUID, populate the created mfs file system with the
 contents of the FFS file system contained on the device.
 .El
 .Pp

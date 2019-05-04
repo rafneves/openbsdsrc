@@ -174,7 +174,7 @@ main(int argc, char *argv[])
 	struct stat st;
 	struct statfs *mp;
 	struct rlimit rl;
-	int fsi = -1, oflagset = 0, fso, len, n, maxpartitions;
+	int fsi = -1, oflagset = 0, fso, fd, len, n, maxpartitions;
 	char *cp = NULL, *s1, *s2, *special, *opstring, *realdev;
 #ifdef MFS
 	char mountfromname[BUFSIZ];
@@ -382,7 +382,10 @@ main(int argc, char *argv[])
 		fso = opendev(special, O_WRONLY, 0, &realdev);
 		if (fso < 0)
 			fatal("%s: %s", special, strerror(errno));
-		special = realdev;
+
+		if ((special = malloc(PATH_MAX)) == NULL)
+			fatal("cannot allocate memory");
+		strlcpy(special, realdev, PATH_MAX);
 
 		/* Bail if target special is mounted */
 		n = getmntinfo(&mp, MNT_NOWAIT);
@@ -526,6 +529,17 @@ havelabel:
 			args.export_info.ex_flags = MNT_EXRDONLY;
 		if (mntflags & MNT_NOPERM)
 			mntflags |= MNT_NODEV | MNT_NOEXEC;
+
+		if (pop != NULL && isduid(pop, 0)) { 
+			fd = opendev(pop, O_RDONLY, OPENDEV_BLCK, &realdev);
+			if (fd < 0)
+				err(1, "could not open %s", pop);
+			close(fd);
+
+			if ((pop = malloc(PATH_MAX)) == NULL)
+				fatal("cannot allocate memory");
+			strlcpy(pop, realdev, PATH_MAX);
+		}
 
 		switch (pid = fork()) {
 		case -1:
