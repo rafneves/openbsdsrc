@@ -55,7 +55,7 @@ main(int argc, char **argv)
 	char *ep, *idstr;
 	const char *errstr;
 
-	if (pledge("stdio getpw prio proc", NULL) == -1)
+	if (pledge("stdio getpw prio", NULL) == -1)
 		err(1, "pledge");
 
 	if (argc < 3)
