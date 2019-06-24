@@ -519,8 +519,23 @@ havelabel:
 		struct mfs_args args;
 		char tmpnode[PATH_MAX];
 
-		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) == 0)
-			errx(1, "Cannot create tmp mountpoint for -P");
+		if (pop != NULL) {
+			if (isduid(pop, 0)) { 
+				fd = opendev(pop, O_RDONLY, OPENDEV_BLCK,
+					     &realdev);
+				if (fd < 0)
+					err(1, "could not open %s", pop);
+				close(fd);
+
+				if ((pop = malloc(PATH_MAX)) == NULL)
+					fatal("cannot allocate memory");
+				strlcpy(pop, realdev, PATH_MAX);
+			}
+
+			if (gettmpmnt(tmpnode, sizeof(tmpnode)) == 0)
+				errx(1, "Cannot create tmp mountpoint for -P");
+		}
+
 		memset(&args, 0, sizeof(args));
 		args.base = membase;
 		args.size = fssize * DEV_BSIZE;
@@ -529,17 +544,6 @@ havelabel:
 			args.export_info.ex_flags = MNT_EXRDONLY;
 		if (mntflags & MNT_NOPERM)
 			mntflags |= MNT_NODEV | MNT_NOEXEC;
-
-		if (pop != NULL && isduid(pop, 0)) { 
-			fd = opendev(pop, O_RDONLY, OPENDEV_BLCK, &realdev);
-			if (fd < 0)
-				err(1, "could not open %s", pop);
-			close(fd);
-
-			if ((pop = malloc(PATH_MAX)) == NULL)
-				fatal("cannot allocate memory");
-			strlcpy(pop, realdev, PATH_MAX);
-		}
 
 		switch (pid = fork()) {
 		case -1:
