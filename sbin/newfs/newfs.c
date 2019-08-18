@@ -147,7 +147,7 @@ struct disklabel *getdisklabel(char *, int);
 static void waitformount(char *, pid_t);
 static int do_exec(const char *, const char *, char *const[]);
 static int isdir(const char *);
-static void copy(char *, char *);
+static int copy(char *, char *);
 static int gettmpmnt(char *, size_t);
 #endif
 
@@ -179,6 +179,7 @@ main(int argc, char *argv[])
 #ifdef MFS
 	char mountfromname[BUFSIZ];
 	char *pop = NULL, node[PATH_MAX];
+	int ret;
 	pid_t pid;
 	struct stat mountpoint;
 #endif
@@ -516,7 +517,7 @@ havelabel:
 		struct mfs_args args;
 		char tmpnode[PATH_MAX];
 
-		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) == 0)
+		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) <= 0)
 			errx(1, "Cannot create tmp mountpoint for -P");
 		memset(&args, 0, sizeof(args));
 		args.base = membase;
@@ -537,9 +538,11 @@ havelabel:
 		default:
 			if (pop != NULL) {
 				waitformount(tmpnode, pid);
-				copy(pop, tmpnode);
+				ret = copy(pop, tmpnode);
 				unmount(tmpnode, 0);
 				rmdir(tmpnode);
+				if (ret == -1)
+					exit(1);
 			}
 			waitformount(node, pid);
 			exit(0);
@@ -740,14 +743,18 @@ isdir(const char *path)
 {
 	struct stat st;
 
-	if (stat(path, &st) != 0)
-		err(1, "cannot stat %s", path);
-	if (!S_ISDIR(st.st_mode) && !S_ISBLK(st.st_mode))
-		errx(1, "%s: not a dir or a block device", path);
+	if (stat(path, &st) != 0) {
+		warn("cannot stat %s", path);
+		return (-1);
+	}
+	if (!S_ISDIR(st.st_mode) && !S_ISBLK(st.st_mode)) {
+		warn("%s: not a dir or a block device", path);
+		return  (-1);
+	}
 	return (S_ISDIR(st.st_mode));
 }
 
-static void
+static int 
 copy(char *src, char *dst)
 {
 	int ret, dir, created = 0;
@@ -755,11 +762,16 @@ copy(char *src, char *dst)
 	char mountpoint[MNAMELEN];
 	char *const argv[] = { "pax", "-rw", "-pe", ".", dst, NULL } ;
 
-	dir = isdir(src);
+	if ((dir = isdir(src)) == -1)
+		return (-1);
+
 	if (dir)
 		strlcpy(mountpoint, src, sizeof(mountpoint));
 	else {
 		created = gettmpmnt(mountpoint, sizeof(mountpoint));
+		if (created <= 0)
+			return (-1);
+
 		memset(&mount_args, 0, sizeof(mount_args));
 		mount_args.fspec = src;
 		ret = mount(MOUNT_FFS, mountpoint, MNT_RDONLY, &mount_args);
@@ -769,7 +781,8 @@ copy(char *src, char *dst)
 				warn("rmdir %s", mountpoint);
 			if (unmount(dst, 0) != 0)
 				warn("unmount %s", dst);
-			errc(1, saved_errno, "mount %s %s", src, mountpoint);
+			warnc(saved_errno, "mount %s %s", src, mountpoint);
+			return (-1);
 		}
 	}
 	ret = do_exec(mountpoint, "/bin/pax", argv);
@@ -780,8 +793,10 @@ copy(char *src, char *dst)
 	if (ret != 0) {
 		if (unmount(dst, 0) != 0)
 			warn("unmount %s", dst);
-		errx(1, "copy %s to %s failed", mountpoint, dst);
+		warnx("copy %s to %s failed", mountpoint, dst);
+		return (-1);
 	}
+	return (0);
 }
 
 static int
@@ -792,27 +807,42 @@ gettmpmnt(char *mountpoint, size_t len)
 	struct statfs fs;
 	size_t n;
 
-	if (statfs(tmp, &fs) != 0)
-		err(1, "statfs %s", tmp);
+	if (statfs(tmp, &fs) != 0) {
+		warn("statfs %s", tmp);
+		return (-1);
+	}
+
 	if (fs.f_flags & MNT_RDONLY) {
-		if (statfs(mnt, &fs) != 0)
-			err(1, "statfs %s", mnt);
-		if (strcmp(fs.f_mntonname, "/") != 0)
-			errx(1, "tmp mountpoint %s busy", mnt);
-		if (strlcpy(mountpoint, mnt, len) >= len)
-			errx(1, "tmp mountpoint %s too long", mnt);
+		if (statfs(mnt, &fs) != 0) {
+			warn("statfs %s", mnt);
+			return (-1);
+		}
+		if (strcmp(fs.f_mntonname, "/") != 0) {
+			warnx("tmp mountpoint %s busy", mnt);
+			return (-1);
+		}
+		if (strlcpy(mountpoint, mnt, len) >= len) {
+			warnx("tmp mountpoint %s too long", mnt);
+			return (-1);
+		}
 		return (0);
 	}
 	n = strlcpy(mountpoint, tmp, len);
-	if (n >= len)
-		errx(1, "tmp mount point too long");
+	if (n >= len) {
+		warnx("tmp mount point too long");
+		return (-1);
+	}
 	if (mountpoint[n - 1] != '/')
 		strlcat(mountpoint, "/", len);
 	n = strlcat(mountpoint, "mntXXXXXXXXXX", len);
-	if (n >= len)
-		errx(1, "tmp mount point too long");
-	if (mkdtemp(mountpoint) == NULL)
-		err(1, "mkdtemp %s", mountpoint);
+	if (n >= len) {
+		warnx("tmp mount point too long");
+		return (-1);
+	}
+	if (mkdtemp(mountpoint) == NULL) {
+		warn("mkdtemp %s", mountpoint);
+		return (-1);
+	}
 	return (1);
 }
 
