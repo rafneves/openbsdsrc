@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia.c,v 1.247 2019/04/08 10:16:10 stsp Exp $	*/
+/*	$OpenBSD: azalia.c,v 1.250 2019/08/13 15:28:12 jcs Exp $	*/
 /*	$NetBSD: azalia.c,v 1.20 2006/05/07 08:31:44 kent Exp $	*/
 
 /*-
@@ -453,6 +453,7 @@ azalia_configure_pci(azalia_t *az)
 	case PCI_PRODUCT_INTEL_100SERIES_LP_HDA:
 	case PCI_PRODUCT_INTEL_200SERIES_HDA:
 	case PCI_PRODUCT_INTEL_200SERIES_U_HDA:
+	case PCI_PRODUCT_INTEL_300SERIES_U_HDA:
 	case PCI_PRODUCT_INTEL_C600_HDA:
 	case PCI_PRODUCT_INTEL_C610_HDA:
 	case PCI_PRODUCT_INTEL_BSW_HDA:
@@ -521,7 +522,7 @@ azalia_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (PCI_VENDOR(sc->pciid) == PCI_VENDOR_AMD) {
 		switch (PCI_PRODUCT(sc->pciid)) {
 		case PCI_PRODUCT_AMD_AMD64_17_HDA:
-		case PCI_PRODUCT_AMD_RAVENRIDGE_HDA:
+		case PCI_PRODUCT_AMD_AMD64_17_1X_HDA:
 			pa->pa_flags &= ~PCI_FLAGS_MSI_ENABLED;
 		}
 	}
@@ -2220,7 +2221,12 @@ azalia_codec_select_spkrdac(codec_t *this)
 		for (i = 0; i < w->nconnections; i++) {
 			conv = azalia_codec_find_defdac(this,
 			    w->connections[i], 1);
-			if (conv == this->spkr_dac) {
+			if (this->qrks & AZ_QRK_WID_SPKR2_DAC) {
+				if (conv != this->spkr_dac) {
+					conn = i;
+					break;
+				}
+			} else if (conv == this->spkr_dac) {
 				conn = i;
 				break;
 			}
@@ -2547,37 +2553,43 @@ azalia_codec_delete(codec_t *this)
 	azalia_mixer_delete(this);
 
 	if (this->formats != NULL) {
-		free(this->formats, M_DEVBUF, 0);
+		free(this->formats, M_DEVBUF,
+		    this->nformats * sizeof(struct audio_format));
 		this->formats = NULL;
 	}
 	this->nformats = 0;
 
 	if (this->opins != NULL) {
-		free(this->opins, M_DEVBUF, 0);
+		free(this->opins, M_DEVBUF,
+		    this->nopins * sizeof(struct io_pin));
 		this->opins = NULL;
 	}
 	this->nopins = 0;
 
 	if (this->opins_d != NULL) {
-		free(this->opins_d, M_DEVBUF, 0);
+		free(this->opins_d, M_DEVBUF,
+		    this->nopins_d * sizeof(struct io_pin));
 		this->opins_d = NULL;
 	}
 	this->nopins_d = 0;
 
 	if (this->ipins != NULL) {
-		free(this->ipins, M_DEVBUF, 0);
+		free(this->ipins, M_DEVBUF,
+		    this->nipins * sizeof(struct io_pin));
 		this->ipins = NULL;
 	}
 	this->nipins = 0;
 
 	if (this->ipins_d != NULL) {
-		free(this->ipins_d, M_DEVBUF, 0);
+		free(this->ipins_d, M_DEVBUF,
+		    this->nipins_d * sizeof(struct io_pin));
 		this->ipins_d = NULL;
 	}
 	this->nipins_d = 0;
 
 	if (this->w != NULL) {
-		free(this->w, M_DEVBUF, 0);
+		free(this->w, M_DEVBUF,
+		    this->wend * sizeof(widget_t));
 		this->w = NULL;
 	}
 

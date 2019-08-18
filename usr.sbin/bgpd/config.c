@@ -1,4 +1,4 @@
-/*	$OpenBSD: config.c,v 1.87 2019/03/31 16:57:38 claudio Exp $ */
+/*	$OpenBSD: config.c,v 1.92 2019/08/13 07:39:57 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004, 2005 Henning Brauer <henning@openbsd.org>
@@ -33,7 +33,6 @@
 
 int		host_ip(const char *, struct bgpd_addr *, u_int8_t *);
 void		free_networks(struct network_head *);
-void		free_l3vpns(struct l3vpn_head *);
 
 struct bgpd_config *
 new_config(void)
@@ -43,8 +42,6 @@ new_config(void)
 	if ((conf = calloc(1, sizeof(struct bgpd_config))) == NULL)
 		fatal(NULL);
 
-	if ((conf->as_sets = calloc(1, sizeof(struct as_set_head))) == NULL)
-		fatal(NULL);
 	if ((conf->filters = calloc(1, sizeof(struct filter_head))) == NULL)
 		fatal(NULL);
 	if ((conf->listen_addrs = calloc(1, sizeof(struct listen_addrs))) ==
@@ -54,7 +51,7 @@ new_config(void)
 		fatal(NULL);
 
 	/* init the various list for later */
-	TAILQ_INIT(&conf->peers);
+	RB_INIT(&conf->peers);
 	TAILQ_INIT(&conf->networks);
 	SIMPLEQ_INIT(&conf->l3vpns);
 	SIMPLEQ_INIT(&conf->prefixsets);
@@ -62,7 +59,7 @@ new_config(void)
 	SIMPLEQ_INIT(&conf->rde_prefixsets);
 	SIMPLEQ_INIT(&conf->rde_originsets);
 	RB_INIT(&conf->roa);
-	SIMPLEQ_INIT(conf->as_sets);
+	SIMPLEQ_INIT(&conf->as_sets);
 
 	TAILQ_INIT(conf->filters);
 	TAILQ_INIT(conf->listen_addrs);
@@ -157,7 +154,7 @@ free_prefixtree(struct prefixset_tree *p)
 void
 free_config(struct bgpd_config *conf)
 {
-	struct peer		*p;
+	struct peer		*p, *next;
 	struct listen_addr	*la;
 	struct mrt		*m;
 
@@ -168,8 +165,8 @@ free_config(struct bgpd_config *conf)
 	free_prefixsets(&conf->originsets);
 	free_rde_prefixsets(&conf->rde_prefixsets);
 	free_rde_prefixsets(&conf->rde_originsets);
+	as_sets_free(&conf->as_sets);
 	free_prefixtree(&conf->roa);
-	as_sets_free(conf->as_sets);
 
 	while ((la = TAILQ_FIRST(conf->listen_addrs)) != NULL) {
 		TAILQ_REMOVE(conf->listen_addrs, la, entry);
@@ -183,8 +180,8 @@ free_config(struct bgpd_config *conf)
 	}
 	free(conf->mrt);
 
-	while ((p = TAILQ_FIRST(&conf->peers)) != NULL) {
-		TAILQ_REMOVE(&conf->peers, p, entry);
+	RB_FOREACH_SAFE(p, peer_head, &conf->peers, next) {
+		RB_REMOVE(peer_head, &conf->peers, p);
 		free(p);
 	}
 
@@ -199,7 +196,7 @@ merge_config(struct bgpd_config *xconf, struct bgpd_config *conf)
 {
 	struct listen_addr	*nla, *ola, *next;
 	struct network		*n;
-	struct peer		*p, *np;
+	struct peer		*p, *np, *nextp;
 
 	/*
 	 * merge the freshly parsed conf into the running xconf
@@ -250,9 +247,8 @@ merge_config(struct bgpd_config *xconf, struct bgpd_config *conf)
 	SIMPLEQ_CONCAT(&xconf->originsets, &conf->originsets);
 
 	/* switch the as_sets, first remove the old ones */
-	as_sets_free(xconf->as_sets);
-	xconf->as_sets = conf->as_sets;
-	conf->as_sets = NULL;
+	as_sets_free(&xconf->as_sets);
+	SIMPLEQ_CONCAT(&xconf->as_sets, &conf->as_sets);
 
 	/* switch the network statements, but first remove the old ones */
 	free_networks(&xconf->networks);
@@ -309,22 +305,29 @@ merge_config(struct bgpd_config *xconf, struct bgpd_config *conf)
 	/*
 	 * merge peers:
 	 * - need to know which peers are new, replaced and removed
-	 * - first mark all new peers as RECONF_REINIT
 	 * - walk over old peers and check if there is a corresponding new
 	 *   peer if so mark it RECONF_KEEP. Remove all old peers.
 	 * - swap lists (old peer list is actually empty).
 	 */
-	TAILQ_FOREACH(p, &conf->peers, entry)
-		p->reconf_action = RECONF_REINIT;
-	while ((p = TAILQ_FIRST(&xconf->peers)) != NULL) {
+	RB_FOREACH_SAFE(p, peer_head, &xconf->peers, nextp) {
 		np = getpeerbyid(conf, p->conf.id);
-		if (np != NULL)
+		if (np != NULL) {
 			np->reconf_action = RECONF_KEEP;
+			/* copy the auth state since parent uses it */
+			np->auth = p->auth;
+		} else {
+			/* peer no longer exists, clear pfkey state */
+			pfkey_remove(p);
+		}
 
-		TAILQ_REMOVE(&xconf->peers, p, entry);
+		RB_REMOVE(peer_head, &xconf->peers, p);
 		free(p);
 	}
-	TAILQ_CONCAT(&xconf->peers, &conf->peers, entry);
+	RB_FOREACH_SAFE(np, peer_head, &conf->peers, nextp) {
+		RB_REMOVE(peer_head, &conf->peers, np);
+		if (RB_INSERT(peer_head, &xconf->peers, np) != NULL)
+			fatalx("%s: peer tree is corrupt", __func__);
+	}
 
 	/* conf is merged so free it */
 	free_config(conf);

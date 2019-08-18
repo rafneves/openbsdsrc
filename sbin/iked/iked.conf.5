@@ -1,4 +1,4 @@
-.\" $OpenBSD: iked.conf.5,v 1.54 2019/04/02 09:42:55 sthen Exp $
+.\" $OpenBSD: iked.conf.5,v 1.56 2019/08/16 12:11:07 tobhe Exp $
 .\"
 .\" Copyright (c) 2010 - 2014 Reyk Floeter <reyk@openbsd.org>
 .\" Copyright (c) 2004 Mathieu Sauve-Frankel  All rights reserved.
@@ -15,7 +15,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: April 2 2019 $
+.Dd $Mdocdate: August 16 2019 $
 .Dt IKED.CONF 5
 .Os
 .Sh NAME
@@ -136,6 +136,12 @@ This is the default.
 .It Ic set decouple
 Don't load the negotiated SAs and flows from the kernel.
 This mode is only useful for testing and debugging.
+.It Ic set fragmentation
+Enable IKEv2 Message Fragmentation (RFC 7383) support.
+This allows IKEv2 to operate in environments that might block IP fragments.
+.It Ic set nofragmentation
+Disables IKEv2 Message Fragmentation support.
+This is the default.
 .It Ic set mobike
 Enable MOBIKE (RFC 4555) support.
 This is the default.
@@ -839,6 +845,16 @@ not encryption:
 .It Li aes-256-gmac Ta "288 bits" Ta "[ESP only]"
 .It Li null Ta "" Ta "[ESP only]"
 .El
+.Pp
+Transforms followed by
+.Bq IKE only
+can only be used with the
+.Ic ikesa
+keyword, transforms with
+.Bq ESP only
+can only be used with the
+.Ic childsa
+keyword.
 .Pp
 3DES requires 24 bytes to form its 168-bit key.
 This is because the most significant bit of each byte is used for parity.

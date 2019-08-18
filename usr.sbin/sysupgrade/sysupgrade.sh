@@ -1,6 +1,6 @@
 #!/bin/ksh
 #
-# $OpenBSD: sysupgrade.sh,v 1.13 2019/05/04 11:53:40 ajacoutot Exp $
+# $OpenBSD: sysupgrade.sh,v 1.22 2019/06/21 16:50:26 florian Exp $
 #
 # Copyright (c) 1997-2015 Todd Miller, Theo de Raadt, Ken Westerback
 # Copyright (c) 2015 Robert Peichaer <rpe@openbsd.org>
@@ -33,21 +33,28 @@ ug_err()
 
 usage()
 {
-	ug_err "usage: ${0##*/} [-fn] [-r | -s] [installurl]"
+	ug_err "usage: ${0##*/} [-fkn] [-r | -s] [installurl]"
 }
 
 unpriv()
 {
-	local _file=$2 _user=_syspatch
+	local _file _rc=0 _user=_syspatch
 
-	if [[ $1 == -f && -n ${_file} ]]; then
+	if [[ $1 == -f ]]; then
+		_file=$2
+		shift 2
+	fi
+ 	if [[ -n ${_file} ]]; then
 		>${_file}
 		chown "${_user}" "${_file}"
-		shift 2
 	fi
 	(($# >= 1))
 
-	eval su -s /bin/sh ${_user} -c "'$@'"
+	eval su -s /bin/sh ${_user} -c "'$@'" || _rc=$?
+
+	[[ -n ${_file} ]] && chown root "${_file}"
+
+	return ${_rc}
 }
 
 # Remove all occurrences of first argument from list formed by the remaining
@@ -65,11 +72,13 @@ rmel() {
 RELEASE=false
 SNAP=false
 FORCE=false
+KEEP=false
 REBOOT=true
 
-while getopts fnrs arg; do
+while getopts fknrs arg; do
 	case ${arg} in
 	f)	FORCE=true;;
+	k)	KEEP=true;;
 	n)	REBOOT=false;;
 	r)	RELEASE=true;;
 	s)	SNAP=true;;
@@ -125,10 +134,6 @@ cd ${SETSDIR}
 
 unpriv -f SHA256.sig ftp -Vmo SHA256.sig ${URL}SHA256.sig
 
-if cmp -s /var/db/installed.SHA256.sig SHA256.sig && ! $FORCE; then
-	ug_err "Already on latest snapshot."
-fi
-
 _KEY=openbsd-${_KERNV[0]%.*}${_KERNV[0]#*.}-base.pub
 _NEXTKEY=openbsd-${NEXT_VERSION%.*}${NEXT_VERSION#*.}-base.pub
 
@@ -141,7 +146,13 @@ esac
 
 [[ -f ${SIGNIFY_KEY} ]] || ug_err "cannot find ${SIGNIFY_KEY}"
 
-unpriv -f SHA256 signify -Veq -p "${SIGNIFY_KEY}" -x SHA256.sig -m SHA256
+unpriv -f SHA256 signify -Ve -p "${SIGNIFY_KEY}" -x SHA256.sig -m SHA256
+rm SHA256.sig
+
+if cmp -s /var/db/installed.SHA256 SHA256 && ! $FORCE; then
+	echo "Already on latest snapshot."
+	exit 0
+fi
 
 # INSTALL.*, bsd*, *.tgz
 SETS=$(sed -n -e 's/^SHA256 (\(.*\)) .*/\1/' \
@@ -149,10 +160,10 @@ SETS=$(sed -n -e 's/^SHA256 (\(.*\)) .*/\1/' \
 
 OLD_FILES=$(ls)
 OLD_FILES=$(rmel SHA256 $OLD_FILES)
-OLD_FILES=$(rmel SHA256.sig $OLD_FILES)
 DL=$SETS
 
-for f in $SETS; do
+[[ -n ${OLD_FILES} ]] && echo Verifying old sets.
+for f in ${OLD_FILES}; do
 	if cksum -C SHA256 $f >/dev/null 2>&1; then
 		DL=$(rmel $f ${DL})
 		OLD_FILES=$(rmel $f ${OLD_FILES})
@@ -164,13 +175,15 @@ for f in ${DL}; do
 	unpriv -f $f ftp -Vmo ${f} ${URL}${f}
 done
 
-# re-check signature after downloads
-echo Verifying sets.
-unpriv signify -qC -p "${SIGNIFY_KEY}" -x SHA256.sig ${SETS}
+if [[ -n ${DL} ]]; then
+	echo Verifying sets.
+	unpriv cksum -qC SHA256 ${DL}
+fi
 
-cp bsd.rd /nbsd.upgrade
-ln -f /nbsd.upgrade /bsd.upgrade
-rm /nbsd.upgrade
+${KEEP} && > keep
+
+install -F -m 700 bsd.rd /bsd.upgrade
+sync
 
 if ${REBOOT}; then
 	echo Upgrading.

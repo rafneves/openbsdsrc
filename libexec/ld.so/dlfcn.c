@@ -1,4 +1,4 @@
-/*	$OpenBSD: dlfcn.c,v 1.102 2018/10/22 01:59:08 guenther Exp $ */
+/*	$OpenBSD: dlfcn.c,v 1.104 2019/08/04 23:51:45 guenther Exp $ */
 
 /*
  * Copyright (c) 1998 Per Fogelstrom, Opsycon AB
@@ -148,10 +148,9 @@ dlsym(void *handle, const char *name)
 {
 	elf_object_t	*object;
 	elf_object_t	*dynobj;
-	const elf_object_t	*pobj;
-	char		*retval;
-	const Elf_Sym	*sym = NULL;
-	int flags;
+	struct sym_res	sr;
+	int		flags;
+	Elf_Addr	addr;
 
 	if (handle == NULL || handle == RTLD_NEXT ||
 	    handle == RTLD_SELF || handle == RTLD_DEFAULT) {
@@ -187,21 +186,20 @@ dlsym(void *handle, const char *name)
 		}
 	}
 
-	retval = (void *)_dl_find_symbol(name, &sym,
-	    flags|SYM_NOWARNNOTFOUND, NULL, object, &pobj);
-
-	if (sym != NULL) {
-		retval += sym->st_value;
-#ifdef __hppa__
-		if (ELF_ST_TYPE(sym->st_info) == STT_FUNC)
-			retval = (void *)_dl_md_plabel((Elf_Addr)retval,
-			    pobj->dyn.pltgot);
-#endif
-		DL_DEB(("dlsym: %s in %s: %p\n",
-		    name, object->load_name, retval));
-	} else
+	sr = _dl_find_symbol(name, flags|SYM_NOWARNNOTFOUND, NULL, object);
+	if (sr.sym == NULL) {
 		_dl_errno = DL_NO_SYMBOL;
-	return (retval);
+		return NULL;
+	}
+
+	addr = sr.obj->obj_base + sr.sym->st_value;
+#ifdef __hppa__
+	if (ELF_ST_TYPE(sr.sym->st_info) == STT_FUNC)
+		addr = _dl_md_plabel(addr, sr.obj->dyn.pltgot);
+#endif
+	DL_DEB(("dlsym: %s in %s: %p\n",
+	    name, object->load_name, (void *)addr));
+	return (void *)addr;
 }
 
 int
@@ -526,12 +524,6 @@ _dl_show_objects(void)
 		}
 		_dl_tracefmt(outputfd, object, fmt1, fmt2, objtypename);
 	}
-
-	if (_dl_symcachestat_lookups != 0)
-		DL_DEB(("symcache lookups %d hits %d ratio %d% hits\n",
-		    _dl_symcachestat_lookups, _dl_symcachestat_hits,
-		    (_dl_symcachestat_hits * 100) /
-		    _dl_symcachestat_lookups));
 }
 
 lock_cb *

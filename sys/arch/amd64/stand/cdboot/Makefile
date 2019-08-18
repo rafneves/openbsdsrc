@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile,v 1.35 2019/04/20 22:59:03 deraadt Exp $
+#	$OpenBSD: Makefile,v 1.37 2019/08/03 15:22:19 deraadt Exp $
 
 MAN=	cdboot.8
 
@@ -18,7 +18,7 @@ BINMODE=644
 .PATH:	${SADIR}/libsa
 SRCS+=	machdep.c dev_i386.c exec_i386.c cmd_i386.c
 SRCS+=	gidt.S random_i386.S biosdev.c bioscons.c gateA20.c \
-	memprobe.c diskprobe.c time.c
+	memprobe.c diskprobe.c time.c run_amd64.S
 SRCS+=	softraid_amd64.c
 
 .PATH:	${S}/stand/boot
@@ -28,8 +28,8 @@ SRCS+=	cmd.c vars.c bootarg.c
 SRCS+=	alloc.c exit.c getchar.c putchar.c strcmp.c strlen.c \
 	strncmp.c memcmp.c memcpy.c memmove.c memset.c printf.c snprintf.c \
 	strerror.c strncpy.c strtol.c strtoll.c ctime.c strlcpy.c
-SRCS+=	close.c closeall.c dev.c disklabel.c dkcksum.c fstat.c lseek.c \
-	open.c read.c stat.c cread.c readdir.c cons.c loadfile.c \
+SRCS+=	close.c closeall.c dev.c disklabel.c dkcksum.c fchmod.c fstat.c \
+	lseek.c open.c read.c stat.c cread.c readdir.c cons.c loadfile.c \
 	elf32.c elf64.c
 SRCS+=	ufs.c cd9660.c
 SRCS+=	aes_xts.c bcrypt_pbkdf.c blowfish.c explicit_bzero.c hmac_sha1.c \

@@ -10,7 +10,9 @@
 #define IS_ENABLED(x) x - 0
 #define IS_BUILTIN(x) 1
 
+#define CONFIG_DRM_FBDEV_EMULATION		1
 #define CONFIG_DRM_FBDEV_OVERALLOC		0
+#define CONFIG_BACKLIGHT_CLASS_DEVICE		1
 #define CONFIG_DRM_I915_DEBUG			0
 #define CONFIG_DRM_I915_DEBUG_GEM		0
 #define CONFIG_DRM_I915_FBDEV			1
@@ -21,8 +23,10 @@
 #define CONFIG_PM				0
 #define CONFIG_DRM_AMD_DC			1
 #define CONFIG_DRM_AMD_DC_DCN1_0		1
+#if 0
 #define CONFIG_DRM_AMDGPU_CIK			1
 #define CONFIG_DRM_AMDGPU_SI			1
+#endif
 
 #if BYTE_ORDER == BIG_ENDIAN
 #define __BIG_ENDIAN
@@ -32,6 +36,10 @@
 
 #if NAGP > 0
 #define CONFIG_AGP				1
+#endif
+
+#if defined(__amd64__) || defined(__i386__)
+#define CONFIG_DMI				1
 #endif
 
 #endif

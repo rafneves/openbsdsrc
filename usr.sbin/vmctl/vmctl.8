@@ -1,4 +1,4 @@
-.\"	$OpenBSD: vmctl.8,v 1.63 2019/03/18 21:00:09 kn Exp $
+.\"	$OpenBSD: vmctl.8,v 1.69 2019/08/08 20:37:08 fcambus Exp $
 .\"
 .\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
 .\"
@@ -14,7 +14,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: March 18 2019 $
+.Dd $Mdocdate: August 8 2019 $
 .Dt VMCTL 8
 .Os
 .Sh NAME
@@ -73,7 +73,7 @@ Using
 .Xr cu 1
 connect to the console of the VM with the specified
 .Ar id .
-.It Cm create Ar disk Oo Fl b Ar base | Fl i Ar disk Oc Op Fl s Ar size
+.It Cm create Oo Fl b Ar base | Fl i Ar disk Oc Oo Fl s Ar size Oc Ar disk
 Create a VM disk image file with the specified
 .Ar disk
 path.
@@ -104,7 +104,7 @@ image.
 For the
 .Fl i
 option, the size cannot be smaller than the input disk size.
-The size can be ommitted with the
+The size can be omitted with the
 .Fl b
 and
 .Fl i
@@ -144,7 +144,7 @@ under the same path.
 An alias for the
 .Cm status
 command.
-.It Xo Cm start Ar id | name
+.It Xo Cm start
 .Op Fl cL
 .Bk -words
 .Op Fl B Ar device
@@ -155,6 +155,7 @@ command.
 .Op Fl n Ar switch
 .Op Fl r Ar path
 .Op Fl t Ar name
+.Ar id | name
 .Ek
 .Xc
 Start a new VM
@@ -185,9 +186,11 @@ flag while
 .Ar disk
 and
 .Ar cdrom
-only work with BIOS images.
+only work with VMs booted using BIOS.
 .It Fl b Ar path
-Boot the VM with the specified kernel or BIOS image.
+Boot the VM with the specified
+.Ox
+kernel or custom BIOS image.
 If not specified, the default is to boot using the BIOS image in
 .Pa /etc/firmware/vmm-bios .
 .It Fl c
@@ -218,9 +221,7 @@ The default is 512M.
 .It Fl n Ar switch
 Add a network interface that is attached to the specified virtual
 .Ar switch .
-See
-.Sx SWITCH CONFIGURATION
-in
+See the SWITCH CONFIGURATION section in
 .Xr vm.conf 5
 for more information.
 .It Fl r Ar path
@@ -234,13 +235,13 @@ Use an existing VM with the specified
 .Ar name
 as a template to create a new VM instance.
 The instance will inherit settings from the parent VM,
-except for exclusive options such as disk, interface lladdr, or
+except for exclusive options such as disk, interface lladdr, and
 interface names.
 .El
 .It Cm status Op Ar id
 List VMs running on the host, optionally listing just the selected VM
 .Ar id .
-.It Cm stop Oo Ar id | Fl a Oc Op Fl fw
+.It Cm stop Oo Fl fw Oc Oo Fl a | Ar id Oc
 Stop (terminate) a VM defined by the specified VM
 .Ar id
 or all running VMs
@@ -249,8 +250,6 @@ By default,
 a graceful shutdown will be attempted if the VM supports the
 .Xr vmmci 4
 device.
-Once stopped, if the VM was not defined in a configuration file, then it is
-removed.
 .Pp
 The following options can be specified when stopping a VM:
 .Bl -tag -width "-w"
@@ -267,8 +266,11 @@ Wait until the specified VM has stopped.
 .El
 .Pp
 If the
-.Fl i
-option is specified during VM startup, a corresponding number
+.Fl i ,
+.Fl L ,
+or
+.Fl n
+options are specified during VM startup, a corresponding number
 of host-side
 .Xr tap 4
 interfaces will be allocated and mapped to the
@@ -282,6 +284,21 @@ tap interfaces, such as bridging (via
 or using
 .Xr pf 4
 nat-to rules to create private or host-side NATed networks, as desired.
+For each
+.Xr tap 4
+network interface on the host,
+.Xr vmd 8
+will set the interface's description to allow easy identification of
+the corresponding VM by ID, interface number, and name:
+.Bd -literal -offset indent
+# ifconfig tap0
+tap0: flags=8842<BROADCAST,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+	lladdr fe:e1:ba:d8:50:d1
+	description: vm1-if0-myvm
+	index 15 priority 0 llprio 3
+	groups: tap
+	status: active
+.Ed
 .Sh LOCAL INTERFACES
 Local interfaces can be used to easily configure VM networking without
 needing to manually assign network addresses.
@@ -330,6 +347,11 @@ Local interfaces are assigned to the VM before
 any other interfaces specified with the -i option (thus, local interfaces,
 if requested, are numbered starting at vio0 inside the guest VM).
 .Pp
+If NAT is desired, the
+.Va net.inet.ip.forwarding
+.Xr sysctl 8
+must also be set to 1.
+.Pp
 When using local interfaces, the DHCP configuration offered to the guest VM
 specifies the address of the corresponding host
 .Xr tap 4
@@ -341,11 +363,6 @@ similar to the following:
 .Bd -literal -offset indent
 pass out on $ext_if from 100.64.0.0/10 to any nat-to $ext_if
 .Ed
-.Pp
-If NAT is desired, the
-.Va net.inet.ip.forwarding
-.Xr sysctl 8
-must also be set to 1.
 .Pp
 If desired, DNS queries originating from guest VMs can be redirected to a
 different DNS server with an entry in the host machine's
@@ -378,7 +395,7 @@ A requested VM-based operation could not be completed.
 .Sh EXAMPLES
 Create a 4.5 Gigabyte disk image, disk.img:
 .Bd -literal -offset indent
-$ vmctl create disk.img -s 4.5G
+$ vmctl create -s 4.5G disk.img
 .Ed
 .Pp
 Convert a disk image from the
@@ -386,34 +403,19 @@ Convert a disk image from the
 format to
 .Sq qcow2 :
 .Bd -literal -offset indent
-$ vmctl create disk.qcow2 -i disk.img
+$ vmctl create -i disk.img disk.qcow2
 .Ed
 .Pp
 Create a new VM with 1GB memory, one network interface, one disk image
 ('disk.img') and boot from kernel '/bsd':
 .Bd -literal -offset indent
-# vmctl start "myvm" -m 1G -i 1 -b /bsd -d disk.img
+# vmctl start -m 1G -i 1 -b /bsd -d disk.img "myvm"
 .Ed
 .Pp
 Start a new VM instance with the name 'myvm' from a pre-configured
 VM 'openbsd.4G':
 .Bd -literal -offset indent
-# vmctl start "myvm" -t "openbsd.4G" -d mydisk.img
-.Ed
-.Pp
-.Xr vmd 8
-will create a new
-.Xr tap 4
-network interface on the host side and set the description to indicate
-the VM by ID, interface number, and name:
-.Bd -literal -offset indent
-# ifconfig tap0
-tap0: flags=8842<BROADCAST,RUNNING,SIMPLEX,MULTICAST> mtu 1500
-	lladdr fe:e1:ba:d8:50:d1
-	description: vm1-if0-myvm
-	index 15 priority 0 llprio 3
-	groups: tap
-	status: active
+# vmctl start -t "openbsd.4G" -d mydisk.img "myvm"
 .Ed
 .Pp
 Terminate VM number 1:

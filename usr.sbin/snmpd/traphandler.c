@@ -1,4 +1,4 @@
-/*	$OpenBSD: traphandler.c,v 1.12 2018/04/15 11:57:29 mpf Exp $	*/
+/*	$OpenBSD: traphandler.c,v 1.14 2019/08/14 04:43:32 martijn Exp $	*/
 
 /*
  * Copyright (c) 2014 Bret Stephen Lambert <blambert@openbsd.org>
@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <ber.h>
 #include <event.h>
 #include <fcntl.h>
 #include <imsg.h>
@@ -38,7 +39,6 @@
 #include <unistd.h>
 #include <pwd.h>
 
-#include "ber.h"
 #include "snmpd.h"
 #include "mib.h"
 
@@ -239,10 +239,11 @@ traphandler_parse(char *buf, size_t n, struct ber_element **req,
 		break;
 
 	case SNMP_V2:
-		if (ber_scanf_elements(elm, "{SSSS{e}}", &elm) == -1 ||
-		    ber_scanf_elements(elm, "{SdS}{So}e",
-		    uptime, trapoid, vbinds) == -1)
+		if (ber_scanf_elements(elm, "{SSS{e}}", &elm) == -1 ||
+		    ber_scanf_elements(elm, "{Sd}{So}",
+		    uptime, trapoid) == -1)
 			goto done;
+		*vbinds = elm->be_next->be_next;
 		break;
 
 	default:

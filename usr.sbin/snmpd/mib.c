@@ -1,4 +1,4 @@
-/*	$OpenBSD: mib.c,v 1.93 2019/05/02 14:04:10 gerhard Exp $	*/
+/*	$OpenBSD: mib.c,v 1.96 2019/08/13 12:52:41 sthen Exp $	*/
 
 /*
  * Copyright (c) 2012 Joel Knight <joel@openbsd.org>
@@ -1106,9 +1106,6 @@ mib_iftable(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	u_int32_t		 idx = 0;
 	struct kif		*kif;
 	long long		 i;
-	size_t			 len;
-	int			 ifq;
-	int			 mib[] = { CTL_NET, PF_INET, IPPROTO_IP, 0, 0 };
 
 	/* Get and verify the current row index */
 	idx = o->bo_id[OIDIDX_ifEntry];
@@ -1195,15 +1192,7 @@ mib_iftable(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 		ber_set_header(ber, BER_CLASS_APPLICATION, SNMP_T_COUNTER32);
 		break;
 	case 13:
-		mib[3] = IPCTL_IFQUEUE;
-		mib[4] = IFQCTL_DROPS;
-		len = sizeof(ifq);
-		if (sysctl(mib, sizeofa(mib), &ifq, &len, 0, 0) == -1) {
-			log_info("mib_iftable: %s: invalid ifq: %s",
-			    kif->if_name, strerror(errno));
-			return (-1);
-		}
-		ber = ber_add_integer(ber, ifq);
+		ber = ber_add_integer(ber, (u_int32_t)kif->if_iqdrops);
 		ber_set_header(ber, BER_CLASS_APPLICATION, SNMP_T_COUNTER32);
 		break;
 	case 14:
@@ -1235,15 +1224,7 @@ mib_iftable(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 		ber_set_header(ber, BER_CLASS_APPLICATION, SNMP_T_COUNTER32);
 		break;
 	case 21:
-		mib[3] = IPCTL_IFQUEUE;
-		mib[4] = IFQCTL_LEN;
-		len = sizeof(ifq);
-		if (sysctl(mib, sizeofa(mib), &ifq, &len, 0, 0) == -1) {
-			log_info("mib_iftable: %s: invalid ifq: %s",
-			    kif->if_name, strerror(errno));
-			return (-1);
-		}
-		ber = ber_add_integer(ber, ifq);
+		ber = ber_add_integer(ber, 0);
 		ber_set_header(ber, BER_CLASS_APPLICATION, SNMP_T_GAUGE32);
 		break;
 	case 22:
@@ -1916,7 +1897,7 @@ mib_pflimits(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	if (pl.index == PF_LIMIT_MAX)
 		return (-1);
 
-	if (ioctl(devpf, DIOCGETLIMIT, &pl)) {
+	if (ioctl(devpf, DIOCGETLIMIT, &pl) == -1) {
 		log_warn("DIOCGETLIMIT");
 		return (-1);
 	}
@@ -1972,7 +1953,7 @@ mib_pftimeouts(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	if (pt.timeout == PFTM_MAX)
 		return (-1);
 
-	if (ioctl(devpf, DIOCGETTIMEOUT, &pt)) {
+	if (ioctl(devpf, DIOCGETTIMEOUT, &pt) == -1) {
 		log_warn("DIOCGETTIMEOUT");
 		return (-1);
 	}
@@ -2383,7 +2364,7 @@ mib_pflabelnum(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	extern int		 devpf;
 
 	memset(&pr, 0, sizeof(pr));
-	if (ioctl(devpf, DIOCGETRULES, &pr)) {
+	if (ioctl(devpf, DIOCGETRULES, &pr) == -1) {
 		log_warn("DIOCGETRULES");
 		return (-1);
 	}
@@ -2392,7 +2373,7 @@ mib_pflabelnum(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	lnr = 0;
 	for (nr = 0; nr < mnr; ++nr) {
 		pr.nr = nr;
-		if (ioctl(devpf, DIOCGETRULE, &pr)) {
+		if (ioctl(devpf, DIOCGETRULE, &pr) == -1) {
 			log_warn("DIOCGETRULE");
 			return (-1);
 		}
@@ -2420,7 +2401,7 @@ mib_pflabels(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	idx = o->bo_id[OIDIDX_pfLabelEntry];
 
 	memset(&pr, 0, sizeof(pr));
-	if (ioctl(devpf, DIOCGETRULES, &pr)) {
+	if (ioctl(devpf, DIOCGETRULES, &pr) == -1) {
 		log_warn("DIOCGETRULES");
 		return (-1);
 	}
@@ -2429,7 +2410,7 @@ mib_pflabels(struct oid *oid, struct ber_oid *o, struct ber_element **elm)
 	lnr = 0;
 	for (nr = 0; nr < mnr; ++nr) {
 		pr.nr = nr;
-		if (ioctl(devpf, DIOCGETRULE, &pr)) {
+		if (ioctl(devpf, DIOCGETRULE, &pr) == -1) {
 			log_warn("DIOCGETRULE");
 			return (-1);
 		}

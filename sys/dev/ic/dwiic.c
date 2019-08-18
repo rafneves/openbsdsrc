@@ -1,4 +1,4 @@
-/* $OpenBSD: dwiic.c,v 1.4 2018/05/23 22:08:00 kettenis Exp $ */
+/* $OpenBSD: dwiic.c,v 1.6 2019/08/06 06:56:29 kettenis Exp $ */
 /*
  * Synopsys DesignWare I2C controller
  *
@@ -128,6 +128,8 @@ int
 dwiic_init(struct dwiic_softc *sc)
 {
 	uint32_t reg;
+	uint8_t tx_fifo_depth;
+	uint8_t rx_fifo_depth;
 
 	/* make sure we're talking to a device we know */
 	reg = dwiic_read(sc, DW_IC_COMP_TYPE);
@@ -136,6 +138,18 @@ dwiic_init(struct dwiic_softc *sc)
 		    sc->sc_dev.dv_xname, reg));
 		return 1;
 	}
+
+	/* fetch default timing parameters if not already specified */
+	if (!sc->ss_hcnt)
+		sc->ss_hcnt = dwiic_read(sc, DW_IC_SS_SCL_HCNT);
+	if (!sc->ss_lcnt)
+		sc->ss_lcnt = dwiic_read(sc, DW_IC_SS_SCL_LCNT);
+	if (!sc->fs_hcnt)
+		sc->fs_hcnt = dwiic_read(sc, DW_IC_FS_SCL_HCNT);
+	if (!sc->fs_lcnt)
+		sc->fs_lcnt = dwiic_read(sc, DW_IC_FS_SCL_LCNT);
+	if (!sc->sda_hold_time)
+		sc->sda_hold_time = dwiic_read(sc, DW_IC_SDA_HOLD);
 
 	/* disable the adapter */
 	dwiic_enable(sc, 0);
@@ -156,6 +170,14 @@ dwiic_init(struct dwiic_softc *sc)
 	/* FIFO threshold levels */
 	sc->tx_fifo_depth = 32;
 	sc->rx_fifo_depth = 32;
+	reg = dwiic_read(sc, DW_IC_COMP_PARAM_1);
+	tx_fifo_depth = DW_IC_TX_FIFO_DEPTH(reg);
+	rx_fifo_depth = DW_IC_RX_FIFO_DEPTH(reg);
+	if (tx_fifo_depth > 1 && tx_fifo_depth < sc->tx_fifo_depth)
+		sc->tx_fifo_depth = tx_fifo_depth;
+	if (rx_fifo_depth > 1 && rx_fifo_depth < sc->rx_fifo_depth)
+		sc->rx_fifo_depth = rx_fifo_depth;
+		
 	dwiic_write(sc, DW_IC_TX_TL, sc->tx_fifo_depth / 2);
 	dwiic_write(sc, DW_IC_RX_TL, 0);
 

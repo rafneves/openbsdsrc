@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_vnops.c,v 1.97 2018/08/20 16:00:22 mpi Exp $	*/
+/*	$OpenBSD: vfs_vnops.c,v 1.106 2019/08/13 07:09:21 anton Exp $	*/
 /*	$NetBSD: vfs_vnops.c,v 1.20 1996/02/04 02:18:41 christos Exp $	*/
 
 /*
@@ -247,7 +247,7 @@ vn_fsizechk(struct vnode *vp, struct uio *uio, int ioflag, ssize_t *overrun)
 
 	*overrun = 0;
 	if (vp->v_type == VREG && p != NULL && !(ioflag & IO_NOLIMIT)) {
-		rlim_t limit = p->p_rlimit[RLIMIT_FSIZE].rlim_cur;
+		rlim_t limit = lim_cur_proc(p, RLIMIT_FSIZE);
 
 		/* if already at or over the limit, send the signal and fail */
 		if (uio->uio_offset >= limit) {
@@ -343,30 +343,36 @@ vn_read(struct file *fp, struct uio *uio, int fflags)
 	off_t offset;
 	int error;
 
-	/*
-	 * Check below can race.  We can block on the vnode lock
-	 * and resume with a different `fp->f_offset' value.
-	 */
+	KERNEL_LOCK();
+
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+
 	if ((fflags & FO_POSITION) == 0)
-		offset = fp->f_offset;
+		offset = uio->uio_offset = fp->f_offset;
 	else
 		offset = uio->uio_offset;
 
 	/* no wrap around of offsets except on character devices */
-	if (vp->v_type != VCHR && count > LLONG_MAX - offset)
-		return (EINVAL);
+	if (vp->v_type != VCHR && count > LLONG_MAX - offset) {
+		error = EINVAL;
+		goto done;
+	}
 
-	if (vp->v_type == VDIR)
-		return (EISDIR);
+	if (vp->v_type == VDIR) {
+		error = EISDIR;
+		goto done;
+	}
 
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	if ((fflags & FO_POSITION) == 0)
-		uio->uio_offset = fp->f_offset;
 	error = VOP_READ(vp, uio, (fp->f_flag & FNONBLOCK) ? IO_NDELAY : 0,
 	    cred);
-	if ((fflags & FO_POSITION) == 0)
+	if ((fflags & FO_POSITION) == 0) {
+		mtx_enter(&fp->f_mtx);
 		fp->f_offset += count - uio->uio_resid;
+		mtx_leave(&fp->f_mtx);
+	}
+done:
 	VOP_UNLOCK(vp);
+	KERNEL_UNLOCK();
 	return (error);
 }
 
@@ -380,6 +386,8 @@ vn_write(struct file *fp, struct uio *uio, int fflags)
 	struct ucred *cred = fp->f_cred;
 	int error, ioflag = IO_UNIT;
 	size_t count;
+
+	KERNEL_LOCK();
 
 	/* note: pwrite/pwritev are unaffected by O_APPEND */
 	if (vp->v_type == VREG && (fp->f_flag & O_APPEND) &&
@@ -396,12 +404,16 @@ vn_write(struct file *fp, struct uio *uio, int fflags)
 	count = uio->uio_resid;
 	error = VOP_WRITE(vp, uio, ioflag, cred);
 	if ((fflags & FO_POSITION) == 0) {
+		mtx_enter(&fp->f_mtx);
 		if (ioflag & IO_APPEND)
 			fp->f_offset = uio->uio_offset;
 		else
 			fp->f_offset += count - uio->uio_resid;
+		mtx_leave(&fp->f_mtx);
 	}
 	VOP_UNLOCK(vp);
+
+	KERNEL_UNLOCK();
 	return (error);
 }
 
@@ -497,7 +509,7 @@ vn_ioctl(struct file *fp, u_long com, caddr_t data, struct proc *p)
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
 				return (error);
-			*(int *)data = vattr.va_size - fp->f_offset;
+			*(int *)data = vattr.va_size - foffset(fp);
 			return (0);
 		}
 		if (com == FIONBIO || com == FIOASYNC)  /* XXX */
@@ -590,10 +602,14 @@ vn_seek(struct file *fp, off_t *offset, int whence, struct proc *p)
 	struct vnode *vp = fp->f_data;
 	struct vattr vattr;
 	off_t newoff;
-	int error, special;
+	int error = 0;
+	int special;
 
 	if (vp->v_type == VFIFO)
 		return (ESPIPE);
+
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+
 	if (vp->v_type == VCHR)
 		special = 1;
 	else
@@ -606,21 +622,28 @@ vn_seek(struct file *fp, off_t *offset, int whence, struct proc *p)
 	case SEEK_END:
 		error = VOP_GETATTR(vp, &vattr, cred, p);
 		if (error)
-			return (error);
+			goto out;
 		newoff = *offset + (off_t)vattr.va_size;
 		break;
 	case SEEK_SET:
 		newoff = *offset;
 		break;
 	default:
-		return (EINVAL);
+		error = EINVAL;
+		goto out;
 	}
-	if (!special) {
-		if (newoff < 0)
-			return(EINVAL);
+	if (!special && newoff < 0) {
+		error = EINVAL;
+		goto out;
 	}
-	fp->f_offset = *offset = newoff;
-	return (0);
+	mtx_enter(&fp->f_mtx);
+	fp->f_offset = newoff;
+	mtx_leave(&fp->f_mtx);
+	*offset = newoff;
+
+out:
+	VOP_UNLOCK(vp);
+	return (error);
 }
 
 /*

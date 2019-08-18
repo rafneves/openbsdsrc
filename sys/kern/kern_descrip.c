@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.183 2018/11/05 17:05:50 anton Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.192 2019/08/05 08:35:59 anton Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -343,11 +343,6 @@ dodup3(struct proc *p, int old, int new, int flags, register_t *retval)
 restart:
 	if ((fp = fd_getfile(fdp, old)) == NULL)
 		return (EBADF);
-	if ((u_int)new >= p->p_rlimit[RLIMIT_NOFILE].rlim_cur ||
-	    (u_int)new >= maxfiles) {
-		FRELE(fp, p);
-		return (EBADF);
-	}
 	if (old == new) {
 		/*
 		 * NOTE! This doesn't clear the close-on-exec flag. This might
@@ -357,6 +352,11 @@ restart:
 		*retval = new;
 		FRELE(fp, p);
 		return (0);
+	}
+	if ((u_int)new >= lim_cur(RLIMIT_NOFILE) ||
+	    (u_int)new >= maxfiles) {
+		FRELE(fp, p);
+		return (EBADF);
 	}
 	fdplock(fdp);
 	if (new >= fdp->fd_nfiles) {
@@ -414,7 +414,7 @@ restart:
 	case F_DUPFD:
 	case F_DUPFD_CLOEXEC:
 		newmin = (long)SCARG(uap, arg);
-		if ((u_int)newmin >= p->p_rlimit[RLIMIT_NOFILE].rlim_cur ||
+		if ((u_int)newmin >= lim_cur(RLIMIT_NOFILE) ||
 		    (u_int)newmin >= maxfiles) {
 			error = EINVAL;
 			break;
@@ -518,7 +518,7 @@ restart:
 			break;
 
 		if (fp->f_type != DTYPE_VNODE) {
-			error = EBADF;
+			error = EINVAL;
 			break;
 		}
 		vp = fp->f_data;
@@ -532,12 +532,14 @@ restart:
 			ktrflock(p, &fl);
 #endif
 		if (fl.l_whence == SEEK_CUR) {
+			off_t offset = foffset(fp);
+
 			if (fl.l_start == 0 && fl.l_len < 0) {
 				/* lockf(3) compliance hack */
 				fl.l_len = -fl.l_len;
-				fl.l_start = fp->f_offset - fl.l_len;
+				fl.l_start = offset - fl.l_len;
 			} else
-				fl.l_start += fp->f_offset;
+				fl.l_start += offset;
 		}
 		switch (fl.l_type) {
 
@@ -592,7 +594,7 @@ restart:
 			break;
 
 		if (fp->f_type != DTYPE_VNODE) {
-			error = EBADF;
+			error = EINVAL;
 			break;
 		}
 		vp = fp->f_data;
@@ -602,12 +604,14 @@ restart:
 		if (error)
 			break;
 		if (fl.l_whence == SEEK_CUR) {
+			off_t offset = foffset(fp);
+
 			if (fl.l_start == 0 && fl.l_len < 0) {
 				/* lockf(3) compliance hack */
 				fl.l_len = -fl.l_len;
-				fl.l_start = fp->f_offset - fl.l_len;
+				fl.l_start = offset - fl.l_len;
 			} else
-				fl.l_start += fp->f_offset;
+				fl.l_start += offset;
 		}
 		if (fl.l_type != F_RDLCK &&
 		    fl.l_type != F_WRLCK &&
@@ -663,6 +667,9 @@ finishdup(struct proc *p, struct file *fp, int old, int new,
 		fd_used(fdp, new);
  	}
 
+	/* Prevent race with kevent. */
+	KERNEL_LOCK();
+
 	/*
 	 * Use `fd_fplock' to synchronize with fd_getfile() so that
 	 * the function no longer creates a new reference to the old file.
@@ -678,6 +685,8 @@ finishdup(struct proc *p, struct file *fp, int old, int new,
 		knote_fdclose(p, new);
 		closef(oldfp, p);
 	}
+
+	KERNEL_UNLOCK();
 
 	return (0);
 }
@@ -736,14 +745,18 @@ fdrelease(struct proc *p, int fd)
 	fdpassertlocked(fdp);
 
 	fp = fd_getfile(fdp, fd);
-	if (fp == NULL)
+	if (fp == NULL) {
+		fdpunlock(fdp);
 		return (EBADF);
+	}
+	/* Prevent race with kevent. */
+	KERNEL_LOCK();
 	fdremove(fdp, fd);
 	knote_fdclose(p, fd);
 	fdpunlock(fdp);
 	error = closef(fp, p);
-	fdplock(fdp);
-	return error;
+	KERNEL_UNLOCK();
+	return (error);
 }
 
 /*
@@ -759,8 +772,8 @@ sys_close(struct proc *p, void *v, register_t *retval)
 	struct filedesc *fdp = p->p_fd;
 
 	fdplock(fdp);
+	/* fdrelease unlocks fdp. */
 	error = fdrelease(p, fd);
-	fdpunlock(fdp);
 
 	return (error);
 }
@@ -864,7 +877,7 @@ fdalloc(struct proc *p, int want, int *result)
 	 * expanding the ofile array.
 	 */
 restart:
-	lim = min((int)p->p_rlimit[RLIMIT_NOFILE].rlim_cur, maxfiles);
+	lim = min((int)lim_cur(RLIMIT_NOFILE), maxfiles);
 	last = min(fdp->fd_nfiles, lim);
 	if ((i = want) < fdp->fd_freefile)
 		i = fdp->fd_freefile;
@@ -1418,8 +1431,11 @@ fdcloseexec(struct proc *p)
 	fdplock(fdp);
 	for (fd = 0; fd <= fdp->fd_lastfile; fd++) {
 		fdp->fd_ofileflags[fd] &= ~UF_PLEDGED;
-		if (fdp->fd_ofileflags[fd] & UF_EXCLOSE)
+		if (fdp->fd_ofileflags[fd] & UF_EXCLOSE) {
+			/* fdrelease() unlocks fdp. */
 			(void) fdrelease(p, fd);
+			fdplock(fdp);
+		}
 	}
 	fdpunlock(fdp);
 }
@@ -1439,8 +1455,11 @@ sys_closefrom(struct proc *p, void *v, register_t *retval)
 		return (EBADF);
 	}
 
-	for (i = startfd; i <= fdp->fd_lastfile; i++)
+	for (i = startfd; i <= fdp->fd_lastfile; i++) {
+		/* fdrelease() unlocks fdp. */
 		fdrelease(p, i);
+		fdplock(fdp);
+	}
 
 	fdpunlock(fdp);
 	return (0);

@@ -1,4 +1,4 @@
-# $OpenBSD: Makefile,v 1.12 2019/03/14 08:45:36 robert Exp $
+# $OpenBSD: Makefile,v 1.14 2019/06/17 22:28:47 patrick Exp $
 
 .include <bsd.own.mk>
 
@@ -15,7 +15,7 @@ AHDRDIR=	${.CURDIR}/../libcxxabi/include
 UHDRDIR=	${.CURDIR}/../libunwind/include
 CXXINCLUDEDIR=	/usr/include/c++/v1
 
-.PATH:	${SRCDIR}
+.PATH:	${SRCDIR} ${SRCDIR}/filesystem
 
 LIB=		c++
 
@@ -27,6 +27,7 @@ SRCS+=		algorithm.cpp \
 		chrono.cpp \
 		condition_variable.cpp \
 		debug.cpp \
+		directory_iterator.cpp \
 		exception.cpp \
 		functional.cpp \
 		future.cpp \
@@ -37,6 +38,7 @@ SRCS+=		algorithm.cpp \
 		memory.cpp \
 		mutex.cpp \
 		new.cpp \
+		operations.cpp \
 		optional.cpp \
 		random.cpp \
 		regex.cpp \
@@ -57,7 +59,7 @@ CPPFLAGS+=	-Wall -DLIBCXXABI -I${HDRDIR} -D_LIBCPP_BUILDING_LIBRARY \
 		-DNDEBUG
 CXXFLAGS+=	-nostdlib -nostdinc++
 .if empty(CXXFLAGS:M-std=*)
-CXXFLAGS+=	-std=c++11
+CXXFLAGS+=	-std=c++14
 .endif
 
 LDADD+=		-L${BSDOBJDIR}/lib/libcxxabi -lc++abi
@@ -91,6 +93,7 @@ STD_HEADERS=	__bit_reference \
 		any \
 		array \
 		atomic \
+		bit \
 		bitset \
 		cassert \
 		ccomplex \
@@ -216,7 +219,6 @@ EXP_HEADERS=	__config \
 		chrono \
 		coroutine \
 		deque \
-		dynarray \
 		filesystem \
 		forward_list \
 		functional \

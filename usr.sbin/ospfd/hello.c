@@ -1,4 +1,4 @@
-/*	$OpenBSD: hello.c,v 1.22 2018/02/22 07:42:38 claudio Exp $ */
+/*	$OpenBSD: hello.c,v 1.24 2019/08/12 20:21:58 remi Exp $ */
 
 /*
  * Copyright (c) 2005 Claudio Jeker <claudio@openbsd.org>
@@ -41,7 +41,6 @@ send_hello(struct iface *iface)
 	struct hello_hdr	 hello;
 	struct nbr		*nbr;
 	struct ibuf		*buf;
-	int			 ret;
 
 	dst.sin_family = AF_INET;
 	dst.sin_len = sizeof(struct sockaddr_in);
@@ -103,11 +102,13 @@ send_hello(struct iface *iface)
 	if (auth_gen(buf, iface))
 		goto fail;
 
-	ret = send_packet(iface, buf, &dst);
+	if (send_packet(iface, buf, &dst) == -1)
+		goto fail;
+
 	ibuf_free(buf);
-	return (ret);
+	return (0);
 fail:
-	log_warn("send_hello");
+	log_warn("%s", __func__);
 	ibuf_free(buf);
 	return (-1);
 }
@@ -188,10 +189,16 @@ recv_hello(struct iface *iface, struct in_addr src, u_int32_t rtr_id, char *buf,
 		nbr->dr.s_addr = hello.d_rtr;
 		nbr->bdr.s_addr = hello.bd_rtr;
 		nbr->priority = hello.rtr_priority;
+		/* XXX neighbor address shouldn't be stored on virtual links */
+		nbr->addr.s_addr = src.s_addr;
 	}
 
-	/* actually the neighbor address shouldn't be stored on virtual links */
-	nbr->addr.s_addr = src.s_addr;
+	if (nbr->addr.s_addr != src.s_addr) {
+		log_warnx("%s: neighbor ID %s changed its IP address",
+		    __func__, inet_ntoa(nbr->id));
+		nbr->addr.s_addr = src.s_addr;
+	}
+
 	nbr->options = hello.opts;
 
 	nbr_fsm(nbr, NBR_EVT_HELLO_RCVD);

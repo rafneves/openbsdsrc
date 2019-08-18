@@ -23,6 +23,7 @@
 ./usr/include/arpa/tftp.h
 ./usr/include/asr.h
 ./usr/include/assert.h
+./usr/include/ber.h
 ./usr/include/bitstring.h
 ./usr/include/blf.h
 ./usr/include/bsd_auth.h
@@ -483,6 +484,7 @@
 ./usr/include/dev/ofw/ofw_pinctrl.h
 ./usr/include/dev/ofw/ofw_power.h
 ./usr/include/dev/ofw/ofw_regulator.h
+./usr/include/dev/ofw/ofw_thermal.h
 ./usr/include/dev/ofw/openfirm.h
 ./usr/include/dev/onewire
 ./usr/include/dev/onewire/onewiredevs.h
@@ -1793,6 +1795,7 @@
 ./usr/share/man/man3/EC_GFp_simple_method.3
 ./usr/share/man/man3/EC_GROUP_copy.3
 ./usr/share/man/man3/EC_GROUP_new.3
+./usr/share/man/man3/EC_KEY_METHOD_new.3
 ./usr/share/man/man3/EC_KEY_new.3
 ./usr/share/man/man3/EC_POINT_add.3
 ./usr/share/man/man3/EC_POINT_new.3
@@ -2112,6 +2115,11 @@
 ./usr/share/man/man3/bcmp.3
 ./usr/share/man/man3/bcopy.3
 ./usr/share/man/man3/bcrypt_pbkdf.3
+./usr/share/man/man3/ber_add_string.3
+./usr/share/man/man3/ber_get_string.3
+./usr/share/man/man3/ber_oid_cmp.3
+./usr/share/man/man3/ber_read_elements.3
+./usr/share/man/man3/ber_set_header.3
 ./usr/share/man/man3/bindresvport.3
 ./usr/share/man/man3/bitstring.3
 ./usr/share/man/man3/blowfish.3
@@ -2295,7 +2303,7 @@
 ./usr/share/man/man3/evbuffer_new.3
 ./usr/share/man/man3/event.3
 ./usr/share/man/man3/evp.3
-./usr/share/man/man3/exec.3
+./usr/share/man/man3/execv.3
 ./usr/share/man/man3/exit.3
 ./usr/share/man/man3/exp.3
 ./usr/share/man/man3/fabs.3
@@ -2863,6 +2871,7 @@
 ./usr/share/man/man9/audio.9
 ./usr/share/man/man9/autoconf.9
 ./usr/share/man/man9/bemtoh32.9
+./usr/share/man/man9/bintimeadd.9
 ./usr/share/man/man9/bio_register.9
 ./usr/share/man/man9/boot.9
 ./usr/share/man/man9/bpf_mtap.9
@@ -2918,6 +2927,7 @@
 ./usr/share/man/man9/knote.9
 ./usr/share/man/man9/kthread.9
 ./usr/share/man/man9/ktrace.9
+./usr/share/man/man9/lim_cur.9
 ./usr/share/man/man9/loadfirmware.9
 ./usr/share/man/man9/log.9
 ./usr/share/man/man9/malloc.9
@@ -2953,6 +2963,7 @@
 ./usr/share/man/man9/rt_ifa_add.9
 ./usr/share/man/man9/rt_timer_add.9
 ./usr/share/man/man9/rtable_add.9
+./usr/share/man/man9/rtable_walk.9
 ./usr/share/man/man9/rtalloc.9
 ./usr/share/man/man9/rtlabel_id2name.9
 ./usr/share/man/man9/rtrequest.9

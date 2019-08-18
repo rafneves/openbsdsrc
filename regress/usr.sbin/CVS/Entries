@@ -1,4 +1,4 @@
-/Makefile/1.18/Wed May  9 19:40:12 2018//
+/Makefile/1.19/Wed Jun 19 07:14:57 2019//
 D/acme-client////
 D/arp////
 D/bgpd////
@@ -10,6 +10,7 @@ D/ospfd////
 D/pkg_add////
 D/rebound////
 D/relayd////
+D/rpki-client////
 D/snmpd////
 D/switchd////
 D/syslogd////

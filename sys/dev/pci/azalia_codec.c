@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia_codec.c,v 1.173 2019/03/24 14:37:44 jcs Exp $	*/
+/*	$OpenBSD: azalia_codec.c,v 1.176 2019/08/13 15:28:12 jcs Exp $	*/
 /*	$NetBSD: azalia_codec.c,v 1.8 2006/05/10 11:17:27 kent Exp $	*/
 
 /*-
@@ -123,6 +123,11 @@ azalia_codec_init_vtbl(codec_t *this)
 	case 0x10ec0282:
 		this->name = "Realtek ALC282";
 		this->qrks |= AZ_QRK_WID_CDIN_1C | AZ_QRK_WID_BEEP_1D;
+		break;
+	case 0x10ec0285:
+		this->name = "Realtek ALC285";
+		if (this->subid == 0x229217aa)		 /* Thinkpad X1 Carbon 7 */
+			this->qrks |= AZ_QRK_WID_SPKR2_DAC;
 		break;
 	case 0x10ec0292:
 		this->name = "Realtek ALC292";
@@ -1348,7 +1353,7 @@ azalia_mixer_ensure_capacity(codec_t *this, size_t newsize)
 		return ENOMEM;
 	}
 	bcopy(this->mixers, newbuf, this->maxmixers * sizeof(mixer_item_t));
-	free(this->mixers, M_DEVBUF, 0);
+	free(this->mixers, M_DEVBUF, this->maxmixers * sizeof(mixer_item_t));
 	this->mixers = newbuf;
 	this->maxmixers = newmax;
 	return 0;

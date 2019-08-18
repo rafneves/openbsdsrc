@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.150 2019/04/23 11:48:55 dlg Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.152 2019/07/29 16:28:25 bluhm Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -353,9 +353,6 @@ struct mgre_tree mgre_tree = RBT_INITIALIZER();
 /*
  * Ethernet GRE tunnels
  */
-#define ether_cmp(_a, _b)	memcmp((_a), (_b), ETHER_ADDR_LEN)
-#define ether_isequal(_a, _b)	(ether_cmp((_a), (_b)) == 0)
-#define ether_isbcast(_e)	ether_isequal((_e), etherbroadcastaddr)
 
 static struct mbuf *
 		gre_ether_align(struct mbuf *, int);
@@ -1455,7 +1452,7 @@ nvgre_input_map(struct nvgre_softc *sc, const struct gre_tunnel *key,
 	struct nvgre_entry *nv, nkey;
 	int new = 0;
 
-	if (ether_isbcast(eh->ether_shost) ||
+	if (ETHER_IS_BROADCAST(eh->ether_shost) ||
 	    ETHER_IS_MULTICAST(eh->ether_shost))
 		return;
 
@@ -1933,8 +1930,10 @@ mgre_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dest,
 	}
 
 	m = gre_l3_encap_dst(&sc->sc_tunnel, addr, m, dest->sa_family);
-	if (m == NULL)
+	if (m == NULL) {
+		ifp->if_oerrors++;
 		return (ENOBUFS);
+	}
 
 	m->m_pkthdr.ph_family = dest->sa_family;
 
@@ -2145,6 +2144,10 @@ gre_encap_dst_ip(const struct gre_tunnel *tunnel, const union gre_addr *dst,
     struct mbuf *m, uint8_t ttl, uint8_t tos)
 {
 	switch (tunnel->t_af) {
+	case AF_UNSPEC:
+		/* packets may arrive before tunnel is set up */
+		m_freem(m);
+		return (NULL);
 	case AF_INET: {
 		struct ip *ip;
 
@@ -2191,8 +2194,7 @@ gre_encap_dst_ip(const struct gre_tunnel *tunnel, const union gre_addr *dst,
 	}
 #endif /* INET6 */
 	default:
-		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
-		    tunnel);
+		unhandled_af(tunnel->t_af);
 	}
 
 	return (m);
@@ -2218,8 +2220,7 @@ gre_ip_output(const struct gre_tunnel *tunnel, struct mbuf *m)
 		break;
 #endif
 	default:
-		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
-		    tunnel);
+		unhandled_af(tunnel->t_af);
 	}
 
 	return (0);
@@ -3863,7 +3864,7 @@ nvgre_start(struct ifnet *ifp)
 #endif
 
 		eh = mtod(m0, struct ether_header *);
-		if (ether_isbcast(eh->ether_dhost))
+		if (ETHER_IS_BROADCAST(eh->ether_dhost))
 			gateway = tunnel->t_dst;
 		else {
 			memcpy(&key.nv_dst, eh->ether_dhost,
@@ -4289,7 +4290,7 @@ gre_ip_cmp(int af, const union gre_addr *a, const union gre_addr *b)
 	case AF_INET:
 		return (memcmp(&a->in4, &b->in4, sizeof(a->in4)));
 	default:
-		panic("%s: unsupported af %d\n", __func__, af);
+		unhandled_af(af);
 	}
 
 	return (0);

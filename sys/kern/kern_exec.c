@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exec.c,v 1.203 2019/02/08 12:51:57 bluhm Exp $	*/
+/*	$OpenBSD: kern_exec.c,v 1.208 2019/08/02 02:17:35 cheloha Exp $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -201,7 +201,7 @@ check_exec(struct proc *p, struct exec_package *epp)
 
 		/* check limits */
 		if ((epp->ep_tsize > MAXTSIZ) ||
-		    (epp->ep_dsize > p->p_rlimit[RLIMIT_DATA].rlim_cur))
+		    (epp->ep_dsize > lim_cur(RLIMIT_DATA)))
 			error = ENOMEM;
 
 		if (!error)
@@ -654,8 +654,8 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 
 		timeout_del(&pr->ps_realit_to);
 		for (i = 0; i < nitems(pr->ps_timer); i++) {
-			timerclear(&pr->ps_timer[i].it_interval);
-			timerclear(&pr->ps_timer[i].it_value);
+			timespecclear(&pr->ps_timer[i].it_interval);
+			timespecclear(&pr->ps_timer[i].it_value);
 		}
 		splx(s);
 	}
@@ -724,8 +724,8 @@ bad:
 	if (pack.ep_flags & EXEC_HASFD) {
 		pack.ep_flags &= ~EXEC_HASFD;
 		fdplock(p->p_fd);
+		/* fdrelease unlocks p->p_fd. */
 		(void) fdrelease(p, pack.ep_fd);
-		fdpunlock(p->p_fd);
 	}
 	if (pack.ep_interp != NULL)
 		pool_put(&namei_pool, pack.ep_interp);

@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile,v 1.100 2018/12/11 13:29:52 gilles Exp $
+#	$OpenBSD: Makefile,v 1.102 2019/08/10 16:07:02 gilles Exp $
 
 .PATH:		${.CURDIR}/..
 
@@ -37,6 +37,7 @@ SRCS+=	mta.c
 SRCS+=	mta_session.c
 SRCS+=	parse.y
 SRCS+=	pony.c
+SRCS+=	proxy.c
 SRCS+=	queue.c
 SRCS+=	queue_backend.c
 SRCS+=	report_smtp.c
@@ -91,7 +92,7 @@ CFLAGS+=	-Wshadow -Wpointer-arith -Wcast-qual
 CFLAGS+=	-Wsign-compare
 CFLAGS+=	-Werror-implicit-function-declaration
 #CFLAGS+=	-Werror # during development phase (breaks some archs)
-CFLAGS+=	-DIO_SSL
+CFLAGS+=	-DIO_TLS
 CFLAGS+=	-DQUEUE_PROFILING
 YFLAGS=
 

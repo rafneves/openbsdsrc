@@ -32,11 +32,11 @@ int ntabstops = 1;		/* Number of tabstops */
 int tabdefault = 8;		/* Default repeated tabstops */
 off_t highest_hilite;		/* Pos of last hilite in file found so far */
 
-static int curr;		/* Index into linebuf */
-static int column;	/* Printable length, accounting for backspaces, etc. */
+static int curr;		/* Total number of bytes in linebuf */
+static int column;		/* Display columns needed to show linebuf */
 static int overstrike;		/* Next char should overstrike previous char */
 static int is_null_line;	/* There is no current line */
-static int lmargin;		/* Left margin */
+static int lmargin;		/* Index in linebuf of start of content */
 static char pendc;
 static off_t pendpos;
 static char *end_ansi_chars;
@@ -64,7 +64,6 @@ extern off_t start_attnpos;
 extern off_t end_attnpos;
 
 static char mbc_buf[MAX_UTF_CHAR_LEN];
-static int mbc_buf_len = 0;
 static int mbc_buf_index = 0;
 static off_t mbc_pos;
 
@@ -129,7 +128,6 @@ prewind(void)
 	column = 0;
 	cshift = 0;
 	overstrike = 0;
-	mbc_buf_len = 0;
 	is_null_line = 0;
 	pendc = '\0';
 	lmargin = 0;
@@ -204,20 +202,21 @@ plinenum(off_t pos)
 
 /*
  * Shift the input line left.
- * This means discarding N printable chars at the start of the buffer.
+ * Starting at lmargin, some bytes are discarded from the linebuf,
+ * until the number of display columns needed to show these bytes
+ * would exceed the argument.
  */
 static void
 pshift(int shift)
 {
-	LWCHAR prev_ch = 0;
-	unsigned char c;
-	int shifted = 0;
-	int to;
-	int from;
-	int len;
-	int width;
-	int prev_attr;
-	int next_attr;
+	int shifted = 0;  /* Number of display columns already discarded. */
+	int from;         /* Index in linebuf of the current character. */
+	int to;           /* Index in linebuf to move this character to. */
+	int len;          /* Number of bytes in this character. */
+	int width = 0;    /* Display columns needed for this character. */
+	int prev_attr;    /* Attributes of the preceding character. */
+	int next_attr;    /* Attributes of the following character. */
+	unsigned char c;  /* First byte of current character. */
 
 	if (shift > column - lmargin)
 		shift = column - lmargin;
@@ -243,44 +242,41 @@ pshift(int shift)
 			}
 			continue;
 		}
-
-		width = 0;
-
-		if (!IS_ASCII_OCTET(c) && utf_mode) {
-			/* Assumes well-formedness validation already done.  */
-			LWCHAR ch;
-
-			len = utf_len(c);
-			if (from + len > curr)
-				break;
-			ch = get_wchar(linebuf + from);
-			if (!is_composing_char(ch) &&
-			    !is_combining_char(prev_ch, ch))
-				width = is_wide_char(ch) ? 2 : 1;
-			prev_ch = ch;
+		if (utf_mode && !isascii(c)) {
+			wchar_t ch;
+			/*
+			 * Before this point, UTF-8 validity was already
+			 * checked, but for additional safety, treat
+			 * invalid bytes as single-width characters
+			 * if they ever make it here.  Similarly, treat
+			 * non-printable characters as width 1.
+			 */
+			len = mbtowc(&ch, linebuf + from, curr - from);
+			if (len == -1)
+				len = width = 1;
+			else if ((width = wcwidth(ch)) == -1)
+				width = 1;
 		} else {
 			len = 1;
 			if (c == '\b')
 				/* XXX - Incorrect if several '\b' in a row.  */
-				width = (utf_mode && is_wide_char(prev_ch)) ?
-				    -2 : -1;
-			else if (!control_char(c))
-				width = 1;
-			prev_ch = 0;
+				width = width > 0 ? -width : -1;
+			else
+				width = iscntrl(c) ? 0 : 1;
 		}
 
 		if (width == 2 && shift - shifted == 1) {
-			/* Should never happen when called by pshift_all().  */
-			attr[to] = attr[from];
 			/*
-			 * Assume a wide_char will never be the first half of a
-			 * combining_char pair, so reset prev_ch in case we're
-			 * followed by a '\b'.
+			 * Move the first half of a double-width character
+			 * off screen.  Print a space instead of the second
+			 * half.  This should never happen when called
+			 * by pshift_all().
 			 */
-			prev_ch = linebuf[to++] = ' ';
+			attr[to] = attr[from];
+			linebuf[to++] = ' ';
 			from += len;
 			shifted++;
-			continue;
+			break;
 		}
 
 		/* Adjust width for magic cookies. */
@@ -683,6 +679,9 @@ flush_mbc_buf(off_t pos)
 int
 pappend(char c, off_t pos)
 {
+	mbstate_t mbs;
+	size_t sz;
+	wchar_t ch;
 	int r;
 
 	if (pendc) {
@@ -696,13 +695,12 @@ pappend(char c, off_t pos)
 	}
 
 	if (c == '\r' && bs_mode == BS_SPECIAL) {
-		if (mbc_buf_len > 0)  /* utf_mode must be on. */ {
+		if (mbc_buf_index > 0)  /* utf_mode must be on. */ {
 			/* Flush incomplete (truncated) sequence. */
 			r = flush_mbc_buf(mbc_pos);
-			mbc_buf_index = r + 1;
-			mbc_buf_len = 0;
+			mbc_buf_index = 0;
 			if (r)
-				return (mbc_buf_index);
+				return (r + 1);
 		}
 
 		/*
@@ -718,40 +716,43 @@ pappend(char c, off_t pos)
 	if (!utf_mode) {
 		r = do_append((LWCHAR) c, NULL, pos);
 	} else {
-		/* Perform strict validation in all possible cases. */
-		if (mbc_buf_len == 0) {
-retry:
-			mbc_buf_index = 1;
-			*mbc_buf = c;
-			if (IS_ASCII_OCTET(c)) {
-				r = do_append((LWCHAR) c, NULL, pos);
-			} else if (IS_UTF8_LEAD(c)) {
-				mbc_buf_len = utf_len(c);
+		for (;;) {
+			if (mbc_buf_index == 0)
 				mbc_pos = pos;
-				return (0);
-			} else {
-				/* UTF8_INVALID or stray UTF8_TRAIL */
-				r = flush_mbc_buf(pos);
-			}
-		} else if (IS_UTF8_TRAIL(c)) {
 			mbc_buf[mbc_buf_index++] = c;
-			if (mbc_buf_index < mbc_buf_len)
+			memset(&mbs, 0, sizeof(mbs));
+			sz = mbrtowc(&ch, mbc_buf, mbc_buf_index, &mbs);
+			
+			/* Incomplete UTF-8: wait for more bytes. */
+			if (sz == (size_t)-2)
 				return (0);
-			if (is_utf8_well_formed(mbc_buf))
-				r = do_append(get_wchar(mbc_buf), mbc_buf,
-				    mbc_pos);
+
+			/* Valid UTF-8: use the character. */
+			if (sz != (size_t)-1) {
+				r = do_append(ch, mbc_buf, mbc_pos) ?
+				    mbc_buf_index : 0;
+				break;
+			}
+
+			/* Invalid start byte: encode it. */
+			if (mbc_buf_index == 1) {
+				r = store_prchar(c, pos);
+				break;
+			}
+
+			/*
+			 * Invalid continuation.
+			 * Encode the preceding bytes.
+			 * If they fit, handle the interrupting byte.
+			 * Otherwise, tell the caller to back up
+			 * by the  number of bytes that do not fit,
+			 * plus one for the new byte.
+			 */
+			mbc_buf_index--;
+			if ((r = flush_mbc_buf(mbc_pos) + 1) == 1)
+				mbc_buf_index = 0;
 			else
-				/* Complete, but not shortest form, sequence. */
-				mbc_buf_index = r = flush_mbc_buf(mbc_pos);
-			mbc_buf_len = 0;
-		} else {
-			/* Flush incomplete (truncated) sequence.  */
-			r = flush_mbc_buf(mbc_pos);
-			mbc_buf_index = r + 1;
-			mbc_buf_len = 0;
-			/* Handle new char.  */
-			if (!r)
-				goto retry;
+				break;
 		}
 	}
 
@@ -765,10 +766,7 @@ retry:
 		linebuf[curr] = '\0';
 		pshift(hshift - cshift);
 	}
-	if (r) {
-		/* How many chars should caller back up? */
-		r = (!utf_mode) ? 1 : mbc_buf_index;
-	}
+	mbc_buf_index = 0;
 	return (r);
 }
 
@@ -913,10 +911,10 @@ pflushmbc(void)
 {
 	int r = 0;
 
-	if (mbc_buf_len > 0) {
+	if (mbc_buf_index > 0) {
 		/* Flush incomplete (truncated) sequence.  */
 		r = flush_mbc_buf(mbc_pos);
-		mbc_buf_len = 0;
+		mbc_buf_index = 0;
 	}
 	return (r);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: lka_proc.c,v 1.6 2018/12/21 19:07:47 gilles Exp $	*/
+/*	$OpenBSD: lka_proc.c,v 1.8 2019/08/10 14:50:58 gilles Exp $	*/
 
 /*
  * Copyright (c) 2018 Gilles Chehade <gilles@poolp.org>
@@ -41,10 +41,12 @@ static struct dict		processors;
 struct processor_instance {
 	char			*name;
 	struct io		*io;
+	struct io		*errfd;
 	int			 ready;
 };
 
 static void	processor_io(struct io *, int, void *);
+static void	processor_errfd(struct io *, int, void *);
 int		lka_filter_process_response(const char *, const char *);
 
 int
@@ -58,6 +60,13 @@ lka_proc_ready(void)
 		if (!pi->ready)
 			return 0;
 	return 1;
+}
+
+static void
+lka_proc_config(struct processor_instance *pi)
+{
+	io_printf(pi->io, "config|smtp-session-timeout|%d\n", SMTPD_SESSION_TIMEOUT);
+	io_printf(pi->io, "config|ready\n");
 }
 
 void
@@ -79,6 +88,22 @@ lka_proc_forked(const char *name, int fd)
 	io_set_fd(processor->io, fd);
 	io_set_callback(processor->io, processor_io, processor->name);
 	dict_xset(&processors, name, processor);
+}
+
+void
+lka_proc_errfd(const char *name, int fd)
+{
+	struct processor_instance	*processor;
+
+	processor = dict_xget(&processors, name);
+
+	io_set_nonblocking(fd);
+
+	processor->errfd = io_new();
+	io_set_fd(processor->errfd, fd);
+	io_set_callback(processor->errfd, processor_errfd, processor->name);
+
+	lka_proc_config(processor);
 }
 
 struct io *
@@ -135,5 +160,19 @@ processor_io(struct io *io, int evt, void *arg)
 			fatalx("misbehaving filter");
 
 		goto nextline;
+	}
+}
+
+static void
+processor_errfd(struct io *io, int evt, void *arg)
+{
+	const char	*name = arg;
+	char		*line = NULL;
+	ssize_t		 len;
+
+	switch (evt) {
+	case IO_DATAIN:
+		while ((line = io_getline(io, &len)) != NULL)
+			log_warnx("%s: %s", name, line);
 	}
 }
