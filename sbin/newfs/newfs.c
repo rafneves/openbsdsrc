@@ -179,7 +179,6 @@ main(int argc, char *argv[])
 #ifdef MFS
 	char mountfromname[BUFSIZ];
 	char *pop = NULL, node[PATH_MAX];
-	int ret;
 	pid_t pid;
 	struct stat mountpoint;
 #endif
@@ -516,6 +515,7 @@ havelabel:
 	if (mfs) {
 		struct mfs_args args;
 		char tmpnode[PATH_MAX];
+		int ret = 0;
 
 		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) <= 0)
 			errx(1, "Cannot create tmp mountpoint for -P");
@@ -541,7 +541,7 @@ havelabel:
 				ret = copy(pop, tmpnode);
 				unmount(tmpnode, 0);
 				rmdir(tmpnode);
-				if (ret == -1)
+				if (ret != 0)
 					exit(1);
 			}
 			waitformount(node, pid);
