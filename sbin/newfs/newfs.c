@@ -541,10 +541,12 @@ havelabel:
 				ret = copy(pop, tmpnode);
 				unmount(tmpnode, 0);
 				rmdir(tmpnode);
-				if (ret != 0)
-					exit(1);
 			}
 			waitformount(node, pid);
+			if (ret != 0) {
+				unmount(node, 0);
+				exit(1);
+			}
 			exit(0);
 			/* NOTREACHED */
 		}
