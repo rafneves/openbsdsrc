@@ -790,8 +790,6 @@ copy(char *src, char *dst)
 	if (!dir && rmdir(mountpoint) != 0)
 		warn("rmdir %s", mountpoint);
 	if (ret != 0) {
-		if (unmount(dst, 0) != 0)
-			warn("unmount %s", dst);
 		warnx("copy %s to %s failed", mountpoint, dst);
 		return (-1);
 	}
