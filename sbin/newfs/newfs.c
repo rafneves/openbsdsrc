@@ -517,7 +517,7 @@ havelabel:
 		char tmpnode[PATH_MAX];
 		int ret = 0;
 
-		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) != 0)
+		if (pop != NULL && gettmpmnt(tmpnode, sizeof(tmpnode)) <= 0)
 			errx(1, "Cannot create tmp mountpoint for -P");
 		memset(&args, 0, sizeof(args));
 		args.base = membase;
@@ -759,7 +759,7 @@ isdir(const char *path)
 static int 
 copy(char *src, char *dst)
 {
-	int ret, dir;
+	int ret, dir, created = 0;
 	struct ufs_args mount_args;
 	char mountpoint[MNAMELEN];
 	char *const argv[] = { "pax", "-rw", "-pe", ".", dst, NULL } ;
@@ -770,7 +770,8 @@ copy(char *src, char *dst)
 	if (dir)
 		strlcpy(mountpoint, src, sizeof(mountpoint));
 	else {
-		if (gettmpmnt(mountpoint, sizeof(mountpoint)) != 0)
+		created = gettmpmnt(mountpoint, sizeof(mountpoint));
+		if (created <= 0)
 			return (-1);
 
 		memset(&mount_args, 0, sizeof(mount_args));
@@ -778,7 +779,7 @@ copy(char *src, char *dst)
 		ret = mount(MOUNT_FFS, mountpoint, MNT_RDONLY, &mount_args);
 		if (ret != 0) {
 			int saved_errno = errno;
-			if (rmdir(mountpoint) != 0)
+			if (created && rmdir(mountpoint) != 0)
 				warn("rmdir %s", mountpoint);
 			warnc(saved_errno, "mount %s %s", src, mountpoint);
 			return (-1);
@@ -787,9 +788,11 @@ copy(char *src, char *dst)
 	ret = do_exec(mountpoint, "/bin/pax", argv);
 	if (!dir && unmount(mountpoint, 0) != 0)
 		warn("unmount %s", mountpoint);
-	if (!dir && rmdir(mountpoint) != 0)
+	if (created && rmdir(mountpoint) != 0)
 		warn("rmdir %s", mountpoint);
 	if (ret != 0) {
+		if (unmount(dst, 0) != 0)
+			warn("unmount %s", dst);
 		warnx("copy %s to %s failed", mountpoint, dst);
 		return (-1);
 	}
@@ -822,7 +825,7 @@ gettmpmnt(char *mountpoint, size_t len)
 			warnx("tmp mountpoint %s too long", mnt);
 			return (-1);
 		}
-		return (-1);
+		return (0);
 	}
 	n = strlcpy(mountpoint, tmp, len);
 	if (n >= len) {
@@ -840,7 +843,7 @@ gettmpmnt(char *mountpoint, size_t len)
 		warn("mkdtemp %s", mountpoint);
 		return (-1);
 	}
-	return (0);
+	return (1);
 }
 
 #endif /* MFS */
